@@ -1,33 +1,96 @@
+// ── FIREBASE CONFIGURATION ───────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyBhBwDc5AoS50n7XV4e4ZXgXyVb9YkxbLo",
+  authDomain: "zonetune.firebaseapp.com",
+  projectId: "zonetune",
+  storageBucket: "zonetune.firebasestorage.app",
+  messagingSenderId: "219218482618",
+  appId: "1:219218482618:web:e1d1448f7928e358077983",
+  measurementId: "G-J9JFTYDXJ9"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const provider = new firebase.auth.GoogleAuthProvider();
+
+// The function called by your HTML button
+function googleLogin() {
+  auth.signInWithPopup(provider).catch(console.error);
+}
+
+function googleLogout() {
+  auth.signOut();
+}
+
 // ── PALETTE ──────────────────────────────────────────────────────────────────
 const COLORS = ['#c8ff47','#47cfff','#ff5f5f','#ffd166','#c77dff','#ff9f1c','#06d6a0','#ef476f'];
 
 // ── PERSISTENCE ───────────────────────────────────────────────────────────────
-function saveZones() {
-  const data = zones.map(z => ({
+async function saveZones() {
+  const user = auth.currentUser;
+  if (!user) return; // Don't save if no one is logged in
+
+  console.log(zones);
+
+  const cloudData = zones.map(z => ({
     id: z.id,
     name: z.name,
     color: z.color,
-    playlist: z.playlist || [],   // array of { url, label }
+    playlist: z.playlist || [],
+    // Convert the Leaflet map shape into saveable coordinates
+    geoData: z.layer ? JSON.stringify(z.layer.toGeoJSON()) : null
   }));
-  localStorage.setItem('zonetune_zones', JSON.stringify(data));
-  localStorage.setItem('zonetune_nextId', nextId);
+
+  try {
+    await db.collection("users").doc(user.uid).set({
+      savedZones: cloudData,
+      nextId: nextId
+    });
+  } catch (error) {
+    console.error("Error saving to cloud:", error);
+  }
 }
 
-function loadZones() {
+async function loadZonesFromCloud(uid) {
   try {
-    const raw = localStorage.getItem('zonetune_zones');
-    const nid = localStorage.getItem('zonetune_nextId');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return parsed.map(z => ({ ...z, layer: null, playlist: z.playlist || [] }));
+    const doc = await db.collection("users").doc(uid).get();
+    
+    if (doc.exists) {
+      const data = doc.data();
+      nextId = data.nextId || 3;
+      
+      drawnItems.clearLayers(); // Clear map before redrawing
+      
+      zones = data.savedZones.map(cloudZone => {
+        let restoredLayer = null;
+        
+        // If this zone had a map shape saved, redraw it!
+        if (cloudZone.geoData) {
+          const geoJsonObj = JSON.parse(cloudZone.geoData); 
+          const geoLayer = L.geoJSON(geoJsonObj);
+          restoredLayer = geoLayer.getLayers()[0];
+          
+          applyStyle(restoredLayer, cloudZone, false);
+          drawnItems.addLayer(restoredLayer);
+          attachLayerEvents(restoredLayer, cloudZone);
+        }
+        
+        return { ...cloudZone, layer: restoredLayer };
+      });
+
+      console.log(zones)
+      
+      selectedZoneId = zones.length > 0 ? zones[0].id : null;
     }
-  } catch (e) { }
-  return null;
+  } catch (error) {
+    console.error("Error loading from cloud:", error);
+  }
 }
 
 // ── STATE ────────────────────────────────────────────────────────────────────
-const saved = loadZones();
-let zones = saved || [
+let zones = [
   { id: 1, name: 'Zone A', color: COLORS[0], playlist: [], layer: null },
   { id: 2, name: 'Zone B', color: COLORS[1], playlist: [], layer: null },
 ];
@@ -98,6 +161,8 @@ map.on(L.Draw.Event.CREATED, function(e) {
   drawnItems.addLayer(layer);
   z.layer = layer;
   attachLayerEvents(layer, z);
+
+  saveZones();
 
   render();
 
@@ -207,7 +272,10 @@ function addZone() {
   const z = { id: nextId++, name, color, playlist: [], layer: null };
   zones.push(z);
   inp.value = '';
+
   setSelected(z.id);
+
+  saveZones();
 }
 
 function deleteZone(id) {
@@ -269,6 +337,15 @@ async function fetchTrackLabel(url, uri) {
 function clearAllZones() {
   if (!confirm('Remove all zone shapes from the map?')) return;
   zones.forEach(z => { if (z.layer) { drawnItems.removeLayer(z.layer); z.layer = null; } });
+  function saveZones() {
+  if (!confirm('Remove all zone shapes from the map?')) return;
+  zones.forEach(z => { if (z.layer) { drawnItems.removeLayer(z.layer); z.layer = null; } });
+  
+  saveZones(); // <--- ADD THIS LINE HERE!
+  
+  render();
+  if (mode === 'draw') startDraw();
+}
   render();
   if (mode === 'draw') startDraw();
 }
@@ -826,8 +903,20 @@ async function initSpotify() {
   document.getElementById('spOverlay').classList.remove('hidden');
 }
 
-// ── BOOT ──────────────────────────────────────────────────────────────────────
-render();
-updateChip();
-setTimeout(() => setMode('draw'), 600);
-initSpotify();
+// ── BOOT (WRAPPED IN FIREBASE AUTH) ───────────────────────────────────────────
+auth.onAuthStateChanged(async (user) => {  // <-- Notice the 'async' here
+  if (user) {
+    document.getElementById('googleOverlay').classList.add('hidden');
+    
+    // FETCH DATA BEFORE RENDERING
+    await loadZonesFromCloud(user.uid);
+    
+    render();
+    updateChip();
+    setTimeout(() => setMode('draw'), 600);
+    initSpotify(); 
+  } else {
+    document.getElementById('googleOverlay').classList.remove('hidden');
+    document.getElementById('spOverlay').classList.add('hidden'); 
+  }
+});

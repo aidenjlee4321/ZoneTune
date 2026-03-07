@@ -15,15 +15,34 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <!-- Spotify Web Playback SDK -->
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
+<!-- Loads Firebase stuff-->
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
 
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
+<div class="sp-overlay" id="googleOverlay" style="z-index: 9999;">
+  <div class="sp-card">
+    <div class="sp-title">Welcome to ZoneTune</div>
+    <div class="sp-sub">Please sign in with your Google account to access your maps and music.</div>
+    <button class="sp-btn" onclick="googleLogin()" style="background: white; color: black;">
+      Sign in with Google
+    </button>
+  </div>
+</div>
+
 <header>
   <div class="logo">Zone<span>Tune</span></div>
   <div class="badge">OpenStreetMap</div>
   <div class="header-tip">Select a zone · draw its area on the map · assign Spotify music</div>
+
+  <button onclick="googleLogout()" style="background: transparent; color: #ff5f5f; border: 1px solid #ff5f5f; border-radius: 4px; padding: 4px 12px; cursor: pointer; margin-left: auto;">
+    Sign Out
+  </button>
+
 </header>
 
 <!-- Spotify Auth Overlay -->
