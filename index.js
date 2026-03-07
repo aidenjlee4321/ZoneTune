@@ -267,9 +267,9 @@ function updateChip() {
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 function addZone() {
   const inp = document.getElementById('newZoneName');
-  const name = inp.value.trim() || `Zone ${nextId}`;
+  const name = sanitizeName(inp.value.trim()) || `Zone ${nextId}`;
   const color = COLORS[zones.length % COLORS.length];
-  const z = { id: nextId++, name, color, playlist: [], layer: null };
+  const z = { id: nextId++, name, color, playlist: [], shuffle: false, layer: null };
   zones.push(z);
   inp.value = '';
 
@@ -288,6 +288,9 @@ function deleteZone(id) {
   render();
   updateChip();
 }
+function sanitizeName(val) {
+  return val.replace(/<[^>]*>/g, '').slice(0, 40);
+}
 
 function renameZone(id, val) {
   const z = getZone(id);
@@ -298,7 +301,17 @@ function renameZone(id, val) {
   if (z.layer) attachLayerEvents(z.layer, z);
 }
 
+function sanitizeSpotifyUrl(url) {
+  const trimmed = url.trim();
+  // Only allow spotify: URIs or https://open.spotify.com URLs
+  if (/^spotify:[a-z]+:[a-zA-Z0-9]+$/.test(trimmed)) return trimmed;
+  if (/^https:\/\/open\.spotify\.com\/[a-z]+\/[a-zA-Z0-9]+/.test(trimmed)) return trimmed;
+  return '';
+}
+
 function addTrack(zoneId, url) {
+  const clean = sanitizeSpotifyUrl(url);
+  if (!clean) { showToast('Invalid Spotify URL'); return; }
   const z = getZone(zoneId);
   if (!z || !url.trim()) return;
   const uri = extractSpotifyUri(url.trim());
@@ -390,11 +403,17 @@ function render() {
   `).join('');
 
     div.innerHTML = `
-    <div class="music-header">
-      <div class="music-pip" style="background:${z.color}"></div>
-      <span class="music-zone-name">${esc(z.name)}</span>
-      <span class="track-count">${z.playlist.length} track${z.playlist.length !== 1 ? 's' : ''}</span>
-    </div>
+  <div class="music-header">
+    <div class="music-pip" style="background:${z.color}"></div>
+    <span class="music-zone-name">${esc(z.name)}</span>
+    <button class="shuffle-btn ${z.shuffle ? 'on' : ''}" data-zone="${z.id}" title="Shuffle">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/>
+        <polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
+      </svg>
+    </button>
+    <span class="track-count">${z.playlist.length} track${z.playlist.length !== 1 ? 's' : ''}</span>
+  </div>  
     ${tracksHtml || '<div class="no-tracks">No tracks yet</div>'}
     <div class="add-track-row">
       <input class="spotify-inp add-track-inp" placeholder="Paste Spotify track URL…">
@@ -418,6 +437,11 @@ function render() {
     // Remove track buttons
     div.querySelectorAll('.track-del').forEach(btn => {
       btn.addEventListener('click', () => removeTrack(+btn.dataset.zone, +btn.dataset.idx));
+    });
+
+    div.querySelector('.shuffle-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      toggleShuffle(z.id);
     });
 
     ml.appendChild(div);
@@ -688,6 +712,25 @@ async function seekTo(e) {
   await spotifyPlayer.seek(Math.floor(pct * trackDuration));
 }
 
+
+function toggleShuffle(zoneId) {
+  const z = getZone(zoneId);
+  if (!z) return;
+  z.shuffle = !z.shuffle;
+  saveZones();
+  render();
+  showToast(z.shuffle ? `Shuffle on for ${z.name}` : `Shuffle off for ${z.name}`);
+}
+
+function shuffleArray(arr) {  //helper function
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function updatePlayerUI(state) {
   if (!state) return;
   const track = state.track_window?.current_track;
@@ -845,8 +888,8 @@ async function onPersonZoneChange(zoneId) {
 
   if (z.playlist && z.playlist.length > 0) {
     if (playerReady) {
-      // Queue all track URIs and play from first
-      const uris = z.playlist.map(t => t.uri);
+      const tracks = z.shuffle ? shuffleArray(z.playlist) : z.playlist;
+      const uris = tracks.map(t => t.uri);
       await playTrackList(uris);
     } else {
       showToast('Spotify player not ready yet');

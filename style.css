@@ -625,3 +625,144 @@ header {
   color: #555;
   padding: 4px 6px;
 }
+
+.shuffle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #666;
+  padding: 2px 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+
+.shuffle-btn:hover {
+  color: #fff;
+}
+
+.shuffle-btn.on {
+  color: #c8ff47;
+}
+
+/* ── MOBILE LAYOUT (≤768px) ──────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  html, body {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  /* Header: compact */
+  header {
+    padding: 0 12px 0 16px;
+    height: 48px;
+    gap: 8px;
+  }
+
+  .logo { font-size: 16px; }
+  .badge { font-size: 8px; padding: 2px 5px; }
+  .header-tip { display: none; }
+
+  /* Stack: map first, sidebar below */
+  .app {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 48px);
+  }
+
+  .map-wrap {
+    order: 1;
+    min-height: 50vh;
+    flex: 1;
+  }
+
+  .sidebar {
+    order: 2;
+    max-height: 45vh;
+    overflow-y: auto;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .panel { padding: 12px 14px; }
+  .music-scroll { padding: 12px 14px; }
+
+  /* Map toolbar: wrap, larger touch targets */
+  .map-toolbar {
+    padding: 8px 12px;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .tool-btn {
+    padding: 10px 12px;
+    font-size: 11px;
+    min-height: 44px;
+  }
+
+  .active-zone-chip { margin-left: 0; }
+  .vsep { display: none; }
+
+  /* Now-playing: full width, safe bottom */
+  .now-playing {
+    left: 50%;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: calc(100% - 24px);
+    max-width: none;
+    min-width: 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+  }
+
+  .np-art { width: 40px; height: 40px; }
+  .np-track { font-size: 11px; }
+  .np-artist { font-size: 9px; }
+  .np-progress-wrap { margin-top: 4px; }
+  .np-vol-wrap { margin-top: 4px; }
+  .np-ctrl-btn { width: 36px; height: 36px; }
+  .np-ctrl-btn.play-pause { width: 40px; height: 40px; }
+
+  /* Spotify auth overlay */
+  .sp-card {
+    padding: 24px 20px;
+    width: calc(100% - 32px);
+    max-width: none;
+    margin: 16px;
+  }
+
+  .sp-title { font-size: 18px; }
+  .sp-sub { font-size: 10px; }
+
+  /* Zone rows: larger touch targets */
+  .zone-row { padding: 10px 12px; min-height: 44px; }
+  .zone-row:hover .del-btn { opacity: 1; }
+  .del-btn { opacity: 0.7; min-width: 32px; min-height: 32px; }
+
+  /* Add track row */
+  .add-track-row { margin-top: 6px; }
+  .add-track-btn { padding: 8px 12px; min-height: 40px; }
+
+  /* Toast: avoid overlap with home indicator */
+  .toast {
+    bottom: max(24px, calc(env(safe-area-inset-bottom) + 12px));
+  }
+
+  /* Leaflet: touch-friendly zoom controls */
+  .leaflet-control-zoom a {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .leaflet-control-attribution { font-size: 8px !important; }
+}
