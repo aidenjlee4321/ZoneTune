@@ -1,11 +1,22 @@
-const { createServer } = require('node:http');
-const hostname = '127.0.0.1';
-const port = 3000;
-const server = createServer((req, res) => {
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'text/plain');
-  res.end('Hello World');
-});
-server.listen(port, hostname, () => {
-  console.log(`Server running at http://${hostname}:${port}/`);
-});
+const express = require("express")
+const axios = require("axios")
+const app = express()
+
+app.use(express.json())
+
+//Do later
+
+const token = "SPOTIFY_ACCESS_TOKEN"
+
+app.post("/next", async (req,res) => {
+  await axios.post(
+    "https://api.spotify.com/v1/me/player/next",
+    {},
+    {
+      headers: { Authorization: `Bearer ${token}` }
+    }
+  )
+  res.send("Skipped song")
+})
+
+app.listen(3001)
