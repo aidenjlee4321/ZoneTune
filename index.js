@@ -13,7 +13,7 @@ let drawHandler = null;
 
 // ── MAP INIT ─────────────────────────────────────────────────────────────────
 const map = L.map('map', {
-  center: [37.8715, -122.2727], // Berkeley, CA (lat, lng)
+  center: [37.871994, -122.257884], // Berkeley, CA (lat, lng)
   zoom: 13,
   zoomControl: true,
 });
