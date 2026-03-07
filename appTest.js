@@ -4,9 +4,9 @@ const app = express()
 
 app.use(express.json())
 
-//Do later
+//Redo at 11
 
-const token = "SPOTIFY_ACCESS_TOKEN"
+const token = "BQBIbgtV5R__myzqLTYLRbOYNnvxd4nFMQltC-Q7J4t7W0irdEzFJOpJgA0iGbpboJqelSbD8bxYa8eM3nYmBsc32QpJk0au4p0fKGE_GmnVCveZSLaeM07JlgXP0FEfNjSN1P2dbCE"
 
 app.post("/next", async (req,res) => {
   await axios.post(
@@ -18,10 +18,10 @@ app.post("/next", async (req,res) => {
   )
   res.send("Skipped song")
 })
-curl -X POST "https://accounts.spotify.com/api/token" \
+/*curl -X POST "https://accounts.spotify.com/api/token" \
      -H "Content-Type: application/x-www-form-urlencoded" \
      -d "grant_type=client_credentials&client_id=c84c3887954a474287977775f490bfed&client_secret=ec519f13424d4f29a9d632dd3c65066c"
-
+*/
 
 
 app.listen(3001)
