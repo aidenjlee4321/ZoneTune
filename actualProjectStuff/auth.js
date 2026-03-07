@@ -1,0 +1,3 @@
+/login
+/callback
+/fix later
