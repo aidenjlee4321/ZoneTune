@@ -13,7 +13,7 @@ let drawHandler = null;
 
 // ── MAP INIT ─────────────────────────────────────────────────────────────────
 const map = L.map('map', {
-  center: [40.7128, -74.006],
+  center: [-122.2608, 37.8715]
   zoom: 13,
   zoomControl: true,
 });
