@@ -234,57 +234,6 @@ header {
   z-index: 500; flex-shrink: 0;
 }
 
-@media (max-width: 768px) {
-  html, body {
-    height: auto;
-    overflow: auto;
-  }
-
-  /* Stack layout vertically on phones */
-  .app {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .sidebar {
-    order: 2;
-    max-height: 45vh;
-    overflow-y: auto;
-    border-right: none;
-    border-top: 1px solid var(--border);
-  }
-
-  .map-wrap {
-    order: 1;
-    min-height: 55vh;
-  }
-
-  /* Tweak header text so it fits */
-  header {
-    padding: 0 16px;
-  }
-
-  .header-tip {
-    font-size: 9px;
-    max-width: 55%;
-    text-align: right;
-  }
-
-  /* Spotify overlay card a bit tighter on small screens */
-  .sp-card {
-    padding: 24px 18px;
-    width: 92%;
-  }
-
-  /* Now playing bar spans width cleanly on mobile */
-  .now-playing {
-    left: 50%;
-    bottom: 12px;
-    width: calc(100% - 24px);
-    max-width: none;
-  }
-}
-
 .tool-btn {
   display: flex; align-items: center; gap: 6px;
   background: var(--surface2); border: 1px solid var(--border);
