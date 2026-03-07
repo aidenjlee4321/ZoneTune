@@ -556,3 +556,72 @@ header {
   z-index: 9999; white-space: nowrap;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+
+
+.track-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #ccc;
+}
+
+.track-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.track-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-del {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0 2px;
+}
+
+.track-del:hover {
+  color: #ff5f5f;
+}
+
+.add-track-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.add-track-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #fff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.add-track-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.track-count {
+  font-size: 10px;
+  color: #666;
+  margin-left: auto;
+}
+
+.no-tracks {
+  font-size: 11px;
+  color: #555;
+  padding: 4px 6px;
+}

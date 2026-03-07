@@ -1,13 +1,38 @@
 // ── PALETTE ──────────────────────────────────────────────────────────────────
 const COLORS = ['#c8ff47','#47cfff','#ff5f5f','#ffd166','#c77dff','#ff9f1c','#06d6a0','#ef476f'];
 
+// ── PERSISTENCE ───────────────────────────────────────────────────────────────
+function saveZones() {
+  const data = zones.map(z => ({
+    id: z.id,
+    name: z.name,
+    color: z.color,
+    playlist: z.playlist || [],   // array of { url, label }
+  }));
+  localStorage.setItem('zonetune_zones', JSON.stringify(data));
+  localStorage.setItem('zonetune_nextId', nextId);
+}
+
+function loadZones() {
+  try {
+    const raw = localStorage.getItem('zonetune_zones');
+    const nid = localStorage.getItem('zonetune_nextId');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return parsed.map(z => ({ ...z, layer: null, playlist: z.playlist || [] }));
+    }
+  } catch (e) { }
+  return null;
+}
+
 // ── STATE ────────────────────────────────────────────────────────────────────
-let zones = [
-  { id: 1, name: 'Zone A', color: COLORS[0], spotifyUrl: '', layer: null },
-  { id: 2, name: 'Zone B', color: COLORS[1], spotifyUrl: '', layer: null },
+const saved = loadZones();
+let zones = saved || [
+  { id: 1, name: 'Zone A', color: COLORS[0], playlist: [], layer: null },
+  { id: 2, name: 'Zone B', color: COLORS[1], playlist: [], layer: null },
 ];
-let nextId = 3;
-let selectedZoneId = zones[0].id;
+let nextId = parseInt(localStorage.getItem('zonetune_nextId') || '3');
+let selectedZoneId = zones[0].id;   // ← must come AFTER zones is defined
 let mode = 'draw';
 let drawHandler = null;
 
@@ -179,7 +204,7 @@ function addZone() {
   const inp = document.getElementById('newZoneName');
   const name = inp.value.trim() || `Zone ${nextId}`;
   const color = COLORS[zones.length % COLORS.length];
-  const z = { id: nextId++, name, color, spotifyUrl: '', layer: null };
+  const z = { id: nextId++, name, color, playlist: [], layer: null };
   zones.push(z);
   inp.value = '';
   setSelected(z.id);
@@ -190,6 +215,7 @@ function deleteZone(id) {
   const z = getZone(id);
   if (z && z.layer) drawnItems.removeLayer(z.layer);
   zones = zones.filter(z => z.id !== id);
+  saveZones();
   if (selectedZoneId === id) selectedZoneId = zones[0]?.id ?? null;
   render();
   updateChip();
@@ -199,16 +225,45 @@ function renameZone(id, val) {
   const z = getZone(id);
   if (!z) return;
   z.name = val || 'Unnamed';
+  saveZones();
   updateChip();
-  // Reattach popup with updated name
   if (z.layer) attachLayerEvents(z.layer, z);
 }
 
-function setSpotify(id, url) {
-  const z = getZone(id);
+function addTrack(zoneId, url) {
+  const z = getZone(zoneId);
+  if (!z || !url.trim()) return;
+  const uri = extractSpotifyUri(url.trim());
+  if (!uri) { showToast('Invalid Spotify URL'); return; }
+  if (!uri.includes(':track:')) { showToast('Please paste a track URL (not playlist/album)'); return; }
+  // Fetch track metadata from Spotify API for display label
+  fetchTrackLabel(url.trim(), uri).then(label => {
+    z.playlist.push({ url: url.trim(), uri, label });
+    saveZones();
+    render();
+  });
+}
+
+function removeTrack(zoneId, index) {
+  const z = getZone(zoneId);
   if (!z) return;
-  z.spotifyUrl = url;
-  if (z.layer) attachLayerEvents(z.layer, z);
+  z.playlist.splice(index, 1);
+  saveZones();
+  render();
+}
+
+async function fetchTrackLabel(url, uri) {
+  if (!spotifyToken) return uri; // fallback to raw URI
+  try {
+    const trackId = uri.split(':').pop();
+    const res = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, {
+      headers: { 'Authorization': 'Bearer ' + spotifyToken }
+    });
+    const data = await res.json();
+    return `${data.name} — ${data.artists?.map(a => a.name).join(', ')}`;
+  } catch (e) {
+    return uri;
+  }
 }
 
 function clearAllZones() {
@@ -245,26 +300,49 @@ function render() {
   const ml = document.getElementById('musicList');
   ml.innerHTML = '';
   zones.forEach(z => {
-    const linked = z.spotifyUrl.includes('spotify');
     const div = document.createElement('div');
     div.className = 'music-item';
+
+    const tracksHtml = (z.playlist || []).map((t, i) => `
+    <div class="track-row">
+      <svg class="track-icon" viewBox="0 0 24 24" fill="${z.color}" width="12" height="12">
+        <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.622.622 0 01-.857.207c-2.348-1.435-5.304-1.76-8.785-.964a.622.622 0 11-.277-1.215c3.809-.87 7.076-.496 9.712 1.115a.623.623 0 01.207.857zm1.223-2.722a.78.78 0 01-1.072.257c-2.687-1.652-6.785-2.13-9.965-1.166a.78.78 0 01-.973-.519.781.781 0 01.52-.972c3.633-1.102 8.147-.568 11.233 1.328a.78.78 0 01.257 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 11-.543-1.795c3.528-1.068 9.396-.862 13.105 1.333a.938.938 0 01-.945 1.619z"/></svg>
+      <span class="track-label" title="${esc(t.url)}">${esc(t.label || t.uri)}</span>
+      <button class="track-del" data-zone="${z.id}" data-idx="${i}">✕</button>
+    </div>
+  `).join('');
+
     div.innerHTML = `
-      <div class="music-header">
-        <div class="music-pip" style="background:${z.color}"></div>
-        <span class="music-zone-name">${esc(z.name)}</span>
-      </div>
-      <div class="spotify-row">
-        <div class="spotify-ball">
-          <svg viewBox="0 0 24 24" fill="white"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.622.622 0 01-.857.207c-2.348-1.435-5.304-1.76-8.785-.964a.622.622 0 11-.277-1.215c3.809-.87 7.076-.496 9.712 1.115a.623.623 0 01.207.857zm1.223-2.722a.78.78 0 01-1.072.257c-2.687-1.652-6.785-2.13-9.965-1.166a.78.78 0 01-.973-.519.781.781 0 01.52-.972c3.633-1.102 8.147-.568 11.233 1.328a.78.78 0 01.257 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 11-.543-1.795c3.528-1.068 9.396-.862 13.105 1.333a.938.938 0 01-.945 1.619z"/></svg>
-        </div>
-        <input class="spotify-inp ${linked ? 'linked' : ''}" placeholder="Paste Spotify URL or URI…" value="${esc(z.spotifyUrl)}">
-        ${z.spotifyUrl ? `<a class="open-btn" href="${esc(z.spotifyUrl)}" target="_blank">Open ↗</a>` : ''}
-      </div>
-    `;
-    div.querySelector('.spotify-inp').addEventListener('input', e => {
-      setSpotify(z.id, e.target.value);
-      render();
+    <div class="music-header">
+      <div class="music-pip" style="background:${z.color}"></div>
+      <span class="music-zone-name">${esc(z.name)}</span>
+      <span class="track-count">${z.playlist.length} track${z.playlist.length !== 1 ? 's' : ''}</span>
+    </div>
+    ${tracksHtml || '<div class="no-tracks">No tracks yet</div>'}
+    <div class="add-track-row">
+      <input class="spotify-inp add-track-inp" placeholder="Paste Spotify track URL…">
+      <button class="add-track-btn" data-zone="${z.id}">Add</button>
+    </div>
+  `;
+
+    // Add track on button click
+    div.querySelector('.add-track-btn').addEventListener('click', e => {
+      const inp = div.querySelector('.add-track-inp');
+      addTrack(z.id, inp.value);
+      inp.value = '';
     });
+    // Add track on Enter
+    div.querySelector('.add-track-inp').addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        addTrack(z.id, e.target.value);
+        e.target.value = '';
+      }
+    });
+    // Remove track buttons
+    div.querySelectorAll('.track-del').forEach(btn => {
+      btn.addEventListener('click', () => removeTrack(+btn.dataset.zone, +btn.dataset.idx));
+    });
+
     ml.appendChild(div);
   });
 }
@@ -485,6 +563,26 @@ async function playSpotifyUri(uri) {
   }
 }
 
+async function playTrackList(uris) {
+  if (!playerReady || !spotifyDeviceId || !uris.length) return;
+  await ensureToken();
+  const res = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${spotifyDeviceId}`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': 'Bearer ' + spotifyToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ uris }),  // plays all tracks in order
+  });
+  if (res.status === 204 || res.status === 200) {
+    currentlyPlaying = true;
+    document.getElementById('nowPlaying').classList.add('show');
+  } else {
+    const err = await res.json().catch(() => ({}));
+    showToast('Playback error: ' + (err.error?.message || res.status));
+  }
+}
+
 async function spotifyTogglePlay() {
   if (!spotifyPlayer) return;
   await spotifyPlayer.togglePlay();
@@ -668,17 +766,17 @@ async function onPersonZoneChange(zoneId) {
   document.getElementById('npZoneLabel').textContent = z.name;
   document.getElementById('nowPlaying').classList.add('show');
 
-  if (z.spotifyUrl) {
-    const uri = extractSpotifyUri(z.spotifyUrl);
-    if (uri && playerReady) {
-      await playSpotifyUri(uri);
-    } else if (!playerReady) {
+  if (z.playlist && z.playlist.length > 0) {
+    if (playerReady) {
+      // Queue all track URIs and play from first
+      const uris = z.playlist.map(t => t.uri);
+      await playTrackList(uris);
+    } else {
       showToast('Spotify player not ready yet');
     }
   } else {
-    // No music — pause whatever is playing
     if (spotifyPlayer && currentlyPlaying) await spotifyPlayer.pause();
-    document.getElementById('npTrack').textContent  = 'No music assigned';
+    document.getElementById('npTrack').textContent = 'No tracks assigned';
     document.getElementById('npArtist').textContent = '';
   }
 }
