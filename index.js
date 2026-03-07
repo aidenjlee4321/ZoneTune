@@ -28,8 +28,8 @@ function loadZones() {
 // ── STATE ────────────────────────────────────────────────────────────────────
 const saved = loadZones();
 let zones = saved || [
-  { id: 1, name: 'Zone A', color: COLORS[0], playlist: [], layer: null },
-  { id: 2, name: 'Zone B', color: COLORS[1], playlist: [], layer: null },
+  { id: 1, name: 'Zone A', color: COLORS[0], playlist: [], shuffle: false, layer: null },
+  { id: 2, name: 'Zone B', color: COLORS[1], playlist: [], shuffle: false, layer: null },
 ];
 let nextId = parseInt(localStorage.getItem('zonetune_nextId') || '3');
 let selectedZoneId = zones[0].id;   // ← must come AFTER zones is defined
@@ -204,7 +204,7 @@ function addZone() {
   const inp = document.getElementById('newZoneName');
   const name = inp.value.trim() || `Zone ${nextId}`;
   const color = COLORS[zones.length % COLORS.length];
-  const z = { id: nextId++, name, color, playlist: [], layer: null };
+  const z = { id: nextId++, name, color, playlist: [], shuffle: false, layer: null };
   zones.push(z);
   inp.value = '';
   setSelected(z.id);
@@ -313,11 +313,17 @@ function render() {
   `).join('');
 
     div.innerHTML = `
-    <div class="music-header">
-      <div class="music-pip" style="background:${z.color}"></div>
-      <span class="music-zone-name">${esc(z.name)}</span>
-      <span class="track-count">${z.playlist.length} track${z.playlist.length !== 1 ? 's' : ''}</span>
-    </div>
+  <div class="music-header">
+    <div class="music-pip" style="background:${z.color}"></div>
+    <span class="music-zone-name">${esc(z.name)}</span>
+    <button class="shuffle-btn ${z.shuffle ? 'on' : ''}" data-zone="${z.id}" title="Shuffle">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/>
+        <polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
+      </svg>
+    </button>
+    <span class="track-count">${z.playlist.length} track${z.playlist.length !== 1 ? 's' : ''}</span>
+  </div>  
     ${tracksHtml || '<div class="no-tracks">No tracks yet</div>'}
     <div class="add-track-row">
       <input class="spotify-inp add-track-inp" placeholder="Paste Spotify track URL…">
@@ -341,6 +347,11 @@ function render() {
     // Remove track buttons
     div.querySelectorAll('.track-del').forEach(btn => {
       btn.addEventListener('click', () => removeTrack(+btn.dataset.zone, +btn.dataset.idx));
+    });
+
+    div.querySelector('.shuffle-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      toggleShuffle(z.id);
     });
 
     ml.appendChild(div);
@@ -611,6 +622,25 @@ async function seekTo(e) {
   await spotifyPlayer.seek(Math.floor(pct * trackDuration));
 }
 
+
+function toggleShuffle(zoneId) {
+  const z = getZone(zoneId);
+  if (!z) return;
+  z.shuffle = !z.shuffle;
+  saveZones();
+  render();
+  showToast(z.shuffle ? `Shuffle on for ${z.name}` : `Shuffle off for ${z.name}`);
+}
+
+function shuffleArray(arr) {  //helper function
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function updatePlayerUI(state) {
   if (!state) return;
   const track = state.track_window?.current_track;
@@ -768,8 +798,8 @@ async function onPersonZoneChange(zoneId) {
 
   if (z.playlist && z.playlist.length > 0) {
     if (playerReady) {
-      // Queue all track URIs and play from first
-      const uris = z.playlist.map(t => t.uri);
+      const tracks = z.shuffle ? shuffleArray(z.playlist) : z.playlist;
+      const uris = tracks.map(t => t.uri);
       await playTrackList(uris);
     } else {
       showToast('Spotify player not ready yet');

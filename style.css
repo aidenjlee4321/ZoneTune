@@ -625,3 +625,23 @@ header {
   color: #555;
   padding: 4px 6px;
 }
+
+.shuffle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #666;
+  padding: 2px 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+
+.shuffle-btn:hover {
+  color: #fff;
+}
+
+.shuffle-btn.on {
+  color: #c8ff47;
+}
