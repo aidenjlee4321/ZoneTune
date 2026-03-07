@@ -39,24 +39,33 @@ async function pauseSong() {
   )
 }
 
-/*TO FINISH*/
-async function addToPlaylist() {
-  const res = await axios.get(
-    "https://api.spotify.com/v1/me/player/currently-playing",
-    {
-      headers: { Authorization: `Bearer ${access_token}` }
-    }
-  )
-  return res.data
+async function playSong() {
+  await axios.put(
+    "https://api.spotify.com/v1/me/player/play",
+    {},
+    { headers: { Authorization: `Bearer ${access_token}` } }
+  );
 }
-async function deleteFromPlaylist() {
-  const res = await axios.get(
-    "https://api.spotify.com/v1/me/player/currently-playing",
+
+async function addToPlaylist(trackUri) {
+  // You need to specify playlist ID
+  const playlistId = "YOUR_PLAYLIST_ID";
+  await axios.post(
+    `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
+    { uris: [trackUri] },
+    { headers: { Authorization: `Bearer ${access_token}` } }
+  );
+}
+
+async function deleteFromPlaylist(trackUri) {
+  const playlistId = "YOUR_PLAYLIST_ID";
+  await axios.delete(
+    `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
     {
-      headers: { Authorization: `Bearer ${access_token}` }
+      headers: { Authorization: `Bearer ${access_token}` },
+      data: { tracks: [{ uri: trackUri }] }
     }
-  )
-  return res.data
+  );
 }
 
 
@@ -64,5 +73,8 @@ module.exports = {
   setAccessToken,
   getCurrentSong,
   skipSong,
-  pauseSong
+  pauseSong,
+  playSong,
+  addToPlaylist,
+  deleteFromPlaylist
 }
