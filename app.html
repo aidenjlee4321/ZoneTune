@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZoneTune — Map Your Music</title>
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<!-- Leaflet.draw -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<!-- Spotify Web Playback SDK -->
+<script src="https://sdk.scdn.co/spotify-player.js"></script>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:           #0b0b0e;
+  --surface:      #111115;
+  --surface2:     #18181e;
+  --surface3:     #1f1f27;
+  --border:       #252530;
+  --border-hi:    #3a3a4a;
+  --accent:       #c8ff47;
+  --spotify:      #1DB954;
+  --text:         #dddde8;
+  --text-muted:   #5e5e72;
+  --text-dim:     #2e2e3a;
+  --danger:       #ff5757;
+}
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── HEADER ── */
+header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 24px;
+  height: 52px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  z-index: 1000;
+}
+
+.logo {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: -0.5px;
+  color: var(--accent);
+}
+.logo span { color: var(--text-muted); font-weight: 400; }
+
+.badge {
+  font-size: 9px;
+  background: var(--surface3);
+  color: var(--text-muted);
+  padding: 2px 7px;
+  border-radius: 3px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  border: 1px solid var(--border);
+}
+
+.header-tip {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+
+/* ── LAYOUT ── */
+.app {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.panel-label {
+  font-size: 9px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.zones-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+
+.zone-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  animation: slideIn .18s ease;
+}
+@keyframes slideIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+
+.zone-row:hover { border-color: var(--border-hi); }
+.zone-row.selected { border-color: var(--border-hi); background: var(--surface3); }
+
+.zone-pip { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+.zone-name-inp {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  outline: none;
+}
+.zone-name-inp::placeholder { color: var(--text-dim); }
+
+.zone-mapped { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+
+.del-btn {
+  background: none; border: none;
+  color: var(--text-dim); cursor: pointer;
+  font-size: 13px; padding: 1px 3px;
+  border-radius: 3px; opacity: 0;
+  transition: opacity .12s, color .12s;
+}
+.zone-row:hover .del-btn { opacity: 1; }
+.del-btn:hover { color: var(--danger); }
+
+.add-row { display: flex; gap: 6px; }
+.add-inp {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  outline: none;
+  transition: border-color .15s;
+}
+.add-inp:focus { border-color: var(--accent); border-style: solid; }
+.add-inp::placeholder { color: var(--text-dim); }
+
+.btn {
+  background: var(--accent); color: #0a0a0c;
+  border: none; padding: 7px 12px;
+  border-radius: 6px; font-family: 'DM Mono', monospace;
+  font-size: 11px; font-weight: 500; cursor: pointer;
+  transition: opacity .15s;
+}
+.btn:hover { opacity: .85; }
+
+/* music */
+.music-scroll {
+  flex: 1; overflow-y: auto;
+  padding: 14px 18px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.music-scroll::-webkit-scrollbar { width: 3px; }
+.music-scroll::-webkit-scrollbar-thumb { background: var(--border); }
+
+.music-section-label {
+  font-size: 9px; letter-spacing: 2.5px;
+  text-transform: uppercase; color: var(--text-muted);
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 14px;
+}
+.music-section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.music-item { margin-bottom: 14px; animation: slideIn .18s ease; }
+
+.music-header { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+.music-pip { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.music-zone-name { font-size: 10px; color: var(--text-muted); }
+
+.spotify-row { display: flex; align-items: center; gap: 6px; }
+.spotify-ball {
+  width: 26px; height: 26px; background: var(--spotify);
+  border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; flex-shrink: 0;
+}
+.spotify-ball svg { width: 15px; height: 15px; }
+
+.spotify-inp {
+  flex: 1; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 9px; color: var(--text);
+  font-family: 'DM Mono', monospace; font-size: 10px;
+  outline: none; transition: border-color .15s; min-width: 0;
+}
+.spotify-inp:focus { border-color: var(--spotify); }
+.spotify-inp::placeholder { color: var(--text-dim); }
+.spotify-inp.linked { border-color: #1DB95450; color: var(--spotify); }
+
+.open-btn {
+  background: none; border: 1px solid var(--border);
+  color: var(--text-muted); padding: 5px 8px;
+  border-radius: 5px; font-size: 10px; cursor: pointer;
+  transition: all .12s; white-space: nowrap;
+  text-decoration: none; font-family: 'DM Mono', monospace;
+}
+.open-btn:hover { border-color: var(--spotify); color: var(--spotify); }
+
+/* ── MAP ── */
+.map-wrap {
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+
+.map-toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px; background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  z-index: 500; flex-shrink: 0;
+}
+
+.tool-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text-muted); padding: 6px 11px;
+  border-radius: 5px; font-family: 'DM Mono', monospace;
+  font-size: 10px; cursor: pointer; transition: all .12s;
+}
+.tool-btn:hover { border-color: var(--border-hi); color: var(--text); }
+.tool-btn.on { background: var(--accent); color: #0a0a0c; border-color: var(--accent); }
+.tool-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+
+.vsep { width: 1px; height: 22px; background: var(--border); }
+
+.active-zone-chip {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--surface3); border: 1px solid var(--border-hi);
+  border-radius: 20px; padding: 4px 12px 4px 8px;
+  font-size: 10px; color: var(--text-muted);
+  margin-left: auto; transition: opacity .2s;
+}
+.active-zone-chip.hidden { opacity: 0; pointer-events: none; }
+.chip-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+#map { flex: 1; z-index: 1; }
+
+/* Dark map tiles */
+.leaflet-container { background: #0d0d11 !important; }
+.leaflet-tile-pane { filter: brightness(0.7) saturate(0.5) hue-rotate(195deg); }
+
+.leaflet-control-zoom {
+  border: 1px solid var(--border) !important;
+  background: var(--surface) !important;
+}
+.leaflet-control-zoom a {
+  background: var(--surface) !important;
+  color: var(--text-muted) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+.leaflet-control-zoom a:hover { color: var(--accent) !important; background: var(--surface2) !important; }
+.leaflet-control-attribution {
+  background: rgba(11,11,14,.85) !important;
+  color: var(--text-dim) !important;
+  font-size: 9px !important;
+}
+.leaflet-control-attribution a { color: var(--text-muted) !important; }
+
+/* Popups */
+.leaflet-popup-content-wrapper {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-hi) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,.7) !important;
+  color: var(--text) !important;
+  font-family: 'DM Mono', monospace !important;
+}
+.leaflet-popup-tip { background: var(--surface) !important; }
+.leaflet-popup-close-button { color: var(--text-muted) !important; top: 8px !important; right: 8px !important; }
+.leaflet-popup-content { margin: 14px 16px !important; }
+
+.popup-name { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.popup-music { font-size: 10px; color: var(--spotify); display: flex; align-items: center; gap: 5px; }
+.popup-no-music { font-size: 10px; color: var(--text-dim); }
+.popup-actions { display: flex; gap: 6px; margin-top: 10px; }
+.popup-btn {
+  flex: 1; padding: 5px 0; border-radius: 5px; text-align: center;
+  font-family: 'DM Mono', monospace; font-size: 10px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text-muted); transition: all .12s; text-decoration: none;
+  display: inline-block;
+}
+.popup-btn:hover { border-color: var(--border-hi); color: var(--text); }
+.popup-btn.del:hover { border-color: var(--danger); color: var(--danger); }
+
+/* ── PERSON MARKER ── */
+.person-marker-wrap {
+  position: relative;
+}
+.person-icon {
+  width: 36px;
+  height: 36px;
+  cursor: grab;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.7));
+  transition: transform .1s;
+  display: block;
+}
+.person-icon:active { cursor: grabbing; transform: scale(1.15); }
+
+.person-pulse {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: rgba(200,255,71,0.25);
+  transform: translate(-50%, -50%);
+  animation: pulse 1.8s ease-out infinite;
+  pointer-events: none;
+}
+.person-pulse.in-zone {
+  background: rgba(200,255,71,0.35);
+  animation: pulse-zone 1.2s ease-out infinite;
+}
+
+@keyframes pulse {
+  0%   { transform: translate(-50%,-50%) scale(1); opacity: 0.7; }
+  100% { transform: translate(-50%,-50%) scale(2.2); opacity: 0; }
+}
+@keyframes pulse-zone {
+  0%   { transform: translate(-50%,-50%) scale(1); opacity: 0.9; }
+  100% { transform: translate(-50%,-50%) scale(2.6); opacity: 0; }
+}
+
+/* ── NOW PLAYING BAR ── */
+.now-playing {
+  position: absolute;
+  bottom: 16px; left: 50%;
+  transform: translateX(-50%) translateY(16px);
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: 24px;
+  padding: 8px 16px 8px 10px;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 11px;
+  z-index: 800;
+  opacity: 0; pointer-events: none;
+  transition: opacity .3s, transform .3s;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+  max-width: 340px;
+  white-space: nowrap;
+}
+.now-playing.show {
+  opacity: 1;
+  pointer-events: all;
+  transform: translateX(-50%) translateY(0);
+}
+.np-dot {
+  width: 28px; height: 28px;
+  background: var(--spotify);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  animation: none;
+}
+.now-playing.show .np-dot { animation: npSpin 3s linear infinite; }
+@keyframes npSpin {
+  0%,100% { transform: rotate(0deg); }
+  50% { transform: rotate(180deg); }
+}
+.np-dot svg { width: 15px; height: 15px; }
+.np-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; overflow: hidden; }
+.np-zone { font-size: 9px; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; }
+.np-label { color: var(--spotify); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+.np-open {
+  background: none; border: 1px solid var(--border);
+  color: var(--text-muted); padding: 4px 8px;
+  border-radius: 5px; font-size: 10px; cursor: pointer;
+  transition: all .12s; text-decoration: none;
+  font-family: 'DM Mono', monospace; flex-shrink: 0;
+}
+.np-open:hover { border-color: var(--spotify); color: var(--spotify); }
+.np-none { color: var(--text-dim); font-size: 11px; }
+
+/* ── SPOTIFY AUTH OVERLAY ── */
+.sp-overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(11,11,14,0.96);
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 20px;
+  backdrop-filter: blur(8px);
+}
+.sp-overlay.hidden { display: none; }
+
+.sp-card {
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: 16px;
+  padding: 36px 40px;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+}
+.sp-logo {
+  width: 52px; height: 52px;
+  background: var(--spotify);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+.sp-logo svg { width: 30px; height: 30px; }
+.sp-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 700; }
+.sp-sub { font-size: 11px; color: var(--text-muted); line-height: 1.7; }
+.sp-btn {
+  background: var(--spotify); color: white;
+  border: none; padding: 12px 28px;
+  border-radius: 30px; font-family: 'DM Mono', monospace;
+  font-size: 12px; font-weight: 500; cursor: pointer;
+  transition: opacity .15s; letter-spacing: 0.5px;
+  display: flex; align-items: center; gap: 8px;
+}
+.sp-btn:hover { opacity: .85; }
+.sp-btn svg { width: 16px; height: 16px; }
+.sp-note { font-size: 9px; color: var(--text-dim); }
+
+/* ── NOW PLAYING PLAYER ── */
+.now-playing {
+  position: absolute;
+  bottom: 16px; left: 50%;
+  transform: translateX(-50%) translateY(16px);
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: 16px;
+  padding: 10px 14px;
+  display: flex; align-items: center; gap: 12px;
+  z-index: 800;
+  opacity: 0; pointer-events: none;
+  transition: opacity .3s, transform .3s;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.7);
+  min-width: 300px; max-width: 420px;
+}
+.now-playing.show {
+  opacity: 1; pointer-events: all;
+  transform: translateX(-50%) translateY(0);
+}
+
+.np-art {
+  width: 44px; height: 44px;
+  border-radius: 6px;
+  background: var(--surface2);
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.np-art img { width: 100%; height: 100%; object-fit: cover; }
+.np-art-placeholder { color: var(--text-dim); }
+
+.np-info { flex: 1; min-width: 0; }
+.np-zone-label { font-size: 9px; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 2px; }
+.np-track { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'Syne', sans-serif; font-weight: 600; }
+.np-artist { font-size: 10px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-no-music { font-size: 11px; color: var(--text-dim); }
+
+.np-controls { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.np-ctrl-btn {
+  background: none; border: none;
+  color: var(--text-muted); cursor: pointer;
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .12s;
+}
+.np-ctrl-btn:hover { color: var(--accent); background: var(--surface2); }
+.np-ctrl-btn.play-pause {
+  background: var(--accent); color: #0a0a0c;
+  width: 34px; height: 34px;
+}
+.np-ctrl-btn.play-pause:hover { opacity: .85; }
+
+.np-progress-wrap {
+  width: 100%;
+  margin-top: 6px;
+  display: flex; align-items: center; gap: 6px;
+}
+.np-time { font-size: 9px; color: var(--text-muted); flex-shrink: 0; width: 28px; }
+.np-time.right { text-align: right; }
+.np-bar {
+  flex: 1; height: 3px;
+  background: var(--surface3);
+  border-radius: 2px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.np-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  width: 0%;
+  transition: width .5s linear;
+  pointer-events: none;
+}
+
+.np-vol-wrap { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+.np-vol-icon { color: var(--text-muted); flex-shrink: 0; }
+.np-vol {
+  flex: 1; -webkit-appearance: none;
+  height: 3px; background: var(--surface3); border-radius: 2px; cursor: pointer;
+  outline: none;
+}
+.np-vol::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--accent); cursor: pointer;
+}
+
+/* Loading */
+.map-loading {
+  position: absolute; inset: 0; z-index: 999;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 12px;
+  transition: opacity .5s;
+}
+.map-loading.gone { opacity: 0; pointer-events: none; }
+.spinner {
+  width: 30px; height: 30px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-txt { font-size: 10px; color: var(--text-muted); letter-spacing: 1px; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  background: var(--surface); border: 1px solid var(--border-hi);
+  border-radius: 20px; padding: 8px 18px;
+  font-size: 11px; color: var(--text);
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s, transform .2s;
+  z-index: 9999; white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Zone<span>Tune</span></div>
+  <div class="badge">OpenStreetMap</div>
+  <div class="header-tip">Select a zone · draw its area on the map · assign Spotify music</div>
+</header>
+
+<!-- Spotify Auth Overlay -->
+<div class="sp-overlay" id="spOverlay">
+  <div class="sp-card">
+    <div class="sp-logo">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.622.622 0 01-.857.207c-2.348-1.435-5.304-1.76-8.785-.964a.622.622 0 11-.277-1.215c3.809-.87 7.076-.496 9.712 1.115a.623.623 0 01.207.857zm1.223-2.722a.78.78 0 01-1.072.257c-2.687-1.652-6.785-2.13-9.965-1.166a.78.78 0 01-.973-.519.781.781 0 01.52-.972c3.633-1.102 8.147-.568 11.233 1.328a.78.78 0 01.257 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 11-.543-1.795c3.528-1.068 9.396-.862 13.105 1.333a.938.938 0 01-.945 1.619z"/></svg>
+    </div>
+    <div class="sp-title">Connect Spotify</div>
+    <div class="sp-sub">ZoneTune needs access to your Spotify account to play music when your person enters a zone.<br><br>You'll need a <strong>Spotify Premium</strong> account for playback.</div>
+    <button class="sp-btn" onclick="startSpotifyAuth()">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.622.622 0 01-.857.207c-2.348-1.435-5.304-1.76-8.785-.964a.622.622 0 11-.277-1.215c3.809-.87 7.076-.496 9.712 1.115a.623.623 0 01.207.857zm1.223-2.722a.78.78 0 01-1.072.257c-2.687-1.652-6.785-2.13-9.965-1.166a.78.78 0 01-.973-.519.781.781 0 01.52-.972c3.633-1.102 8.147-.568 11.233 1.328a.78.78 0 01.257 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 11-.543-1.795c3.528-1.068 9.396-.862 13.105 1.333a.938.938 0 01-.945 1.619z"/></svg>
+      Login with Spotify
+    </button>
+    <div class="sp-note">Redirect URI must be set to this page's URL in your Spotify Developer Dashboard</div>
+  </div>
+</div>
+
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="panel">
+      <div class="panel-label">Zones</div>
+      <div class="zones-list" id="zonesList"></div>
+      <div class="add-row">
+        <input class="add-inp" id="newZoneName" placeholder="+ zone name" maxlength="40">
+        <button class="btn" onclick="addZone()">Add</button>
+      </div>
+    </div>
+
+    <div class="music-scroll">
+      <div class="music-section-label">Music</div>
+      <div id="musicList"></div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div class="map-wrap">
+    <div class="map-toolbar">
+      <button class="tool-btn on" id="btnDraw" onclick="setMode('draw')">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        Draw Zone
+      </button>
+      <button class="tool-btn" id="btnNav" onclick="setMode('nav')">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Navigate
+      </button>
+      <div class="vsep"></div>
+      <button class="tool-btn danger" onclick="clearAllZones()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+        Clear All
+      </button>
+      <div class="active-zone-chip hidden" id="chipWrap">
+        <div class="chip-dot" id="chipDot"></div>
+        <span id="chipName">—</span>
+      </div>
+      <div class="vsep"></div>
+      <button class="tool-btn" id="btnPerson" onclick="togglePerson()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="7" r="4"/><path d="M5.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6"/></svg>
+        <span id="btnPersonLabel">Add Person</span>
+      </button>
+    </div>
+    <div id="map"></div>
+    <!-- Now Playing Player -->
+    <div class="now-playing" id="nowPlaying">
+      <div class="np-art" id="npArt">
+        <svg class="np-art-placeholder" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M9.5 8.5l7 3.5-7 3.5V8.5z" fill="currentColor"/></svg>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div class="np-zone-label" id="npZoneLabel">—</div>
+        <div class="np-track" id="npTrack">Not playing</div>
+        <div class="np-artist" id="npArtist"></div>
+        <div class="np-progress-wrap">
+          <span class="np-time" id="npTimeCur">0:00</span>
+          <div class="np-bar" id="npBar" onclick="seekTo(event)"><div class="np-bar-fill" id="npFill"></div></div>
+          <span class="np-time right" id="npTimeDur">0:00</span>
+        </div>
+        <div class="np-vol-wrap">
+          <svg class="np-vol-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>
+          <input class="np-vol" type="range" min="0" max="100" value="80" id="npVol" oninput="setVolume(this.value)">
+        </div>
+      </div>
+      <div class="np-controls">
+        <button class="np-ctrl-btn" onclick="spotifyPrev()" title="Previous">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 20L9 12l10-8v16zM5 4h2v16H5z"/></svg>
+        </button>
+        <button class="np-ctrl-btn play-pause" id="npPlayPause" onclick="spotifyTogglePlay()">
+          <svg id="npPlayIcon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="np-ctrl-btn" onclick="spotifyNext()" title="Next">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4l10 8-10 8V4zM19 4h2v16h-2z"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="map-loading" id="mapLoading">
+      <div class="spinner"></div>
+      <div class="loading-txt">Loading map…</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── PALETTE ──────────────────────────────────────────────────────────────────
+const COLORS = ['#c8ff47','#47cfff','#ff5f5f','#ffd166','#c77dff','#ff9f1c','#06d6a0','#ef476f'];
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let zones = [
+  { id: 1, name: 'Zone A', color: COLORS[0], spotifyUrl: '', layer: null },
+  { id: 2, name: 'Zone B', color: COLORS[1], spotifyUrl: '', layer: null },
+];
+let nextId = 3;
+let selectedZoneId = zones[0].id;
+let mode = 'draw';
+let drawHandler = null;
+
+// ── MAP INIT ─────────────────────────────────────────────────────────────────
+const map = L.map('map', {
+  center: [40.7128, -74.006],
+  zoom: 13,
+  zoomControl: true,
+});
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  maxZoom: 19,
+}).addTo(map);
+
+// Dismiss loader once tiles load
+map.once('load', fadeOutLoader);
+setTimeout(fadeOutLoader, 2500);
+
+function fadeOutLoader() {
+  const el = document.getElementById('mapLoading');
+  if (!el) return;
+  el.classList.add('gone');
+  setTimeout(() => el.remove(), 600);
+}
+
+// Feature group holds all drawn layers
+const drawnItems = new L.FeatureGroup().addTo(map);
+
+// ── DRAW MANAGEMENT ───────────────────────────────────────────────────────────
+function startDraw() {
+  if (drawHandler) { try { drawHandler.disable(); } catch(e){} drawHandler = null; }
+  if (!selectedZoneId) { showToast('Select a zone first'); return; }
+  const z = getZone(selectedZoneId);
+  if (!z) return;
+
+  drawHandler = new L.Draw.Polygon(map, {
+    shapeOptions: {
+      color: z.color,
+      fillColor: z.color,
+      fillOpacity: 0.2,
+      weight: 2,
+      opacity: 0.9,
+    },
+    showArea: false,
+    allowIntersection: false,
+    drawError: { color: '#ff5757', timeout: 1000 },
+    guidelineDistance: 20,
+  });
+  drawHandler.enable();
+}
+
+map.on(L.Draw.Event.CREATED, function(e) {
+  if (!selectedZoneId) return;
+  const z = getZone(selectedZoneId);
+  if (!z) return;
+
+  // Remove previous layer for this zone
+  if (z.layer) drawnItems.removeLayer(z.layer);
+
+  const layer = e.layer;
+  applyStyle(layer, z, true);
+  drawnItems.addLayer(layer);
+  z.layer = layer;
+  attachLayerEvents(layer, z);
+
+  render();
+
+  // Auto-advance to next unmapped zone
+  const next = zones.find(z2 => !z2.layer && z2.id !== selectedZoneId);
+  if (next) {
+    setSelected(next.id);
+    if (mode === 'draw') setTimeout(startDraw, 150);
+  } else {
+    showToast('All zones mapped ✓');
+    drawHandler = null;
+  }
+});
+
+map.on(L.Draw.Event.DRAWSTOP, () => { drawHandler = null; });
+
+function applyStyle(layer, z, isSelected) {
+  layer.setStyle({
+    color:       z.color,
+    fillColor:   z.color,
+    fillOpacity: isSelected ? 0.22 : 0.12,
+    weight:      isSelected ? 2.5 : 1.5,
+    opacity:     isSelected ? 1 : 0.7,
+    dashArray:   isSelected ? null : '6 4',
+  });
+}
+
+function attachLayerEvents(layer, z) {
+  layer.off('click');
+  layer.on('click', function() {
+    setSelected(z.id);
+    openZonePopup(layer, z);
+  });
+  layer.on('mouseover', function() {
+    if (z.id !== selectedZoneId) {
+      layer.setStyle({ fillOpacity: 0.2, weight: 2 });
+    }
+  });
+  layer.on('mouseout', function() {
+    applyStyle(layer, z, z.id === selectedZoneId);
+  });
+}
+
+function openZonePopup(layer, z) {
+  const musicHtml = z.spotifyUrl
+    ? `<div class="popup-music">
+         <svg width="12" height="12" viewBox="0 0 24 24" fill="${z.color}"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.622.622 0 01-.857.207c-2.348-1.435-5.304-1.76-8.785-.964a.622.622 0 11-.277-1.215c3.809-.87 7.076-.496 9.712 1.115a.623.623 0 01.207.857zm1.223-2.722a.78.78 0 01-1.072.257c-2.687-1.652-6.785-2.13-9.965-1.166a.78.78 0 01-.973-.519.781.781 0 01.52-.972c3.633-1.102 8.147-.568 11.233 1.328a.78.78 0 01.257 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 11-.543-1.795c3.528-1.068 9.396-.862 13.105 1.333a.938.938 0 01-.945 1.619z"/></svg>
+         Spotify linked
+       </div>`
+    : `<div class="popup-no-music">No music assigned</div>`;
+
+  const openBtn = z.spotifyUrl
+    ? `<a class="popup-btn" href="${esc(z.spotifyUrl)}" target="_blank">Open ↗</a>` : '';
+
+  layer.bindPopup(`
+    <div>
+      <div class="popup-name" style="color:${z.color}">${esc(z.name)}</div>
+      ${musicHtml}
+      <div class="popup-actions">
+        ${openBtn}
+        <button class="popup-btn del" onclick="deleteZone(${z.id})">Delete zone</button>
+      </div>
+    </div>
+  `, { maxWidth: 220, closeButton: true }).openPopup();
+}
+
+// ── MODE ─────────────────────────────────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  document.getElementById('btnDraw').classList.toggle('on', m === 'draw');
+  document.getElementById('btnNav').classList.toggle('on', m === 'nav');
+  if (m === 'draw') {
+    startDraw();
+  } else {
+    if (drawHandler) { try { drawHandler.disable(); } catch(e){} drawHandler = null; }
+  }
+}
+
+// ── SELECTION ────────────────────────────────────────────────────────────────
+function setSelected(id) {
+  selectedZoneId = id;
+  zones.forEach(z => {
+    if (z.layer) applyStyle(z.layer, z, z.id === id);
+  });
+  render();
+  updateChip();
+  if (mode === 'draw') startDraw();
+}
+
+function updateChip() {
+  const chip = document.getElementById('chipWrap');
+  const z = getZone(selectedZoneId);
+  if (z) {
+    chip.classList.remove('hidden');
+    document.getElementById('chipName').textContent = z.name;
+    document.getElementById('chipDot').style.background = z.color;
+  } else {
+    chip.classList.add('hidden');
+  }
+}
+
+// ── CRUD ─────────────────────────────────────────────────────────────────────
+function addZone() {
+  const inp = document.getElementById('newZoneName');
+  const name = inp.value.trim() || `Zone ${nextId}`;
+  const color = COLORS[zones.length % COLORS.length];
+  const z = { id: nextId++, name, color, spotifyUrl: '', layer: null };
+  zones.push(z);
+  inp.value = '';
+  setSelected(z.id);
+}
+
+function deleteZone(id) {
+  map.closePopup();
+  const z = getZone(id);
+  if (z && z.layer) drawnItems.removeLayer(z.layer);
+  zones = zones.filter(z => z.id !== id);
+  if (selectedZoneId === id) selectedZoneId = zones[0]?.id ?? null;
+  render();
+  updateChip();
+}
+
+function renameZone(id, val) {
+  const z = getZone(id);
+  if (!z) return;
+  z.name = val || 'Unnamed';
+  updateChip();
+  // Reattach popup with updated name
+  if (z.layer) attachLayerEvents(z.layer, z);
+}
+
+function setSpotify(id, url) {
+  const z = getZone(id);
+  if (!z) return;
+  z.spotifyUrl = url;
+  if (z.layer) attachLayerEvents(z.layer, z);
+}
+
+function clearAllZones() {
+  if (!confirm('Remove all zone shapes from the map?')) return;
+  zones.forEach(z => { if (z.layer) { drawnItems.removeLayer(z.layer); z.layer = null; } });
+  render();
+  if (mode === 'draw') startDraw();
+}
+
+// ── RENDER SIDEBAR ────────────────────────────────────────────────────────────
+function render() {
+  // Zones list
+  const zl = document.getElementById('zonesList');
+  zl.innerHTML = '';
+  zones.forEach(z => {
+    const div = document.createElement('div');
+    div.className = 'zone-row' + (z.id === selectedZoneId ? ' selected' : '');
+    div.innerHTML = `
+      <div class="zone-pip" style="background:${z.color}"></div>
+      <input class="zone-name-inp" value="${esc(z.name)}" maxlength="40" placeholder="Zone name">
+      <span class="zone-mapped" title="${z.layer ? 'Mapped' : 'Not drawn yet'}">${z.layer ? '◉' : '○'}</span>
+      <button class="del-btn" title="Delete zone">✕</button>
+    `;
+    div.querySelector('.zone-name-inp').addEventListener('input', e => renameZone(z.id, e.target.value));
+    div.querySelector('.del-btn').addEventListener('click', e => { e.stopPropagation(); deleteZone(z.id); });
+    div.addEventListener('click', e => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+      setSelected(z.id);
+    });
+    zl.appendChild(div);
+  });
+
+  // Music list
+  const ml = document.getElementById('musicList');
+  ml.innerHTML = '';
+  zones.forEach(z => {
+    const linked = z.spotifyUrl.includes('spotify');
+    const div = document.createElement('div');
+    div.className = 'music-item';
+    div.innerHTML = `
+      <div class="music-header">
+        <div class="music-pip" style="background:${z.color}"></div>
+        <span class="music-zone-name">${esc(z.name)}</span>
+      </div>
+      <div class="spotify-row">
+        <div class="spotify-ball">
+          <svg viewBox="0 0 24 24" fill="white"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.622.622 0 01-.857.207c-2.348-1.435-5.304-1.76-8.785-.964a.622.622 0 11-.277-1.215c3.809-.87 7.076-.496 9.712 1.115a.623.623 0 01.207.857zm1.223-2.722a.78.78 0 01-1.072.257c-2.687-1.652-6.785-2.13-9.965-1.166a.78.78 0 01-.973-.519.781.781 0 01.52-.972c3.633-1.102 8.147-.568 11.233 1.328a.78.78 0 01.257 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 11-.543-1.795c3.528-1.068 9.396-.862 13.105 1.333a.938.938 0 01-.945 1.619z"/></svg>
+        </div>
+        <input class="spotify-inp ${linked ? 'linked' : ''}" placeholder="Paste Spotify URL or URI…" value="${esc(z.spotifyUrl)}">
+        ${z.spotifyUrl ? `<a class="open-btn" href="${esc(z.spotifyUrl)}" target="_blank">Open ↗</a>` : ''}
+      </div>
+    `;
+    div.querySelector('.spotify-inp').addEventListener('input', e => {
+      setSpotify(z.id, e.target.value);
+      render();
+    });
+    ml.appendChild(div);
+  });
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function getZone(id) { return zones.find(z => z.id === id); }
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+document.getElementById('newZoneName').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addZone();
+});
+
+// ── SPOTIFY AUTH (PKCE) ───────────────────────────────────────────────────────
+const SP_CLIENT_ID     = '08b989759dcd46fab3f9126cf581f628';
+const SP_REDIRECT_URI  = window.location.href.split('?')[0].split('#')[0];
+const SP_SCOPES        = [
+  'streaming',
+  'user-read-email',
+  'user-read-private',
+  'user-read-playback-state',
+  'user-modify-playback-state',
+].join(' ');
+
+let spotifyToken      = null;
+let spotifyPlayer     = null;
+let spotifyDeviceId   = null;
+let playerReady       = false;
+let currentlyPlaying  = false;
+let progressTimer     = null;
+let trackDuration     = 0;
+let trackPosition     = 0;
+
+// PKCE helpers
+function base64url(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+async function generatePKCE() {
+  const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
+  const challenge = base64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  return { verifier, challenge };
+}
+
+async function startSpotifyAuth() {
+  const { verifier, challenge } = await generatePKCE();
+  sessionStorage.setItem('sp_verifier', verifier);
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id:     SP_CLIENT_ID,
+    scope:         SP_SCOPES,
+    redirect_uri:  SP_REDIRECT_URI,
+    code_challenge_method: 'S256',
+    code_challenge: challenge,
+  });
+  window.location = 'https://accounts.spotify.com/authorize?' + params;
+}
+
+async function exchangeCode(code) {
+  const verifier = sessionStorage.getItem('sp_verifier');
+  const res = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type:    'authorization_code',
+      code,
+      redirect_uri:  SP_REDIRECT_URI,
+      client_id:     SP_CLIENT_ID,
+      code_verifier: verifier,
+    }),
+  });
+  const data = await res.json();
+  if (data.access_token) {
+    spotifyToken = data.access_token;
+    // Store with expiry
+    const expiry = Date.now() + (data.expires_in - 60) * 1000;
+    sessionStorage.setItem('sp_token', spotifyToken);
+    sessionStorage.setItem('sp_expiry', expiry);
+    if (data.refresh_token) sessionStorage.setItem('sp_refresh', data.refresh_token);
+    sessionStorage.removeItem('sp_verifier');
+    // Clean URL
+    history.replaceState({}, '', window.location.pathname);
+    return true;
+  }
+  console.error('Token exchange failed', data);
+  return false;
+}
+
+async function refreshToken() {
+  const refresh = sessionStorage.getItem('sp_refresh');
+  if (!refresh) return false;
+  const res = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type:    'refresh_token',
+      refresh_token: refresh,
+      client_id:     SP_CLIENT_ID,
+    }),
+  });
+  const data = await res.json();
+  if (data.access_token) {
+    spotifyToken = data.access_token;
+    const expiry = Date.now() + (data.expires_in - 60) * 1000;
+    sessionStorage.setItem('sp_token', spotifyToken);
+    sessionStorage.setItem('sp_expiry', expiry);
+    return true;
+  }
+  return false;
+}
+
+async function ensureToken() {
+  const expiry = parseInt(sessionStorage.getItem('sp_expiry') || '0');
+  if (Date.now() > expiry) return await refreshToken();
+  return true;
+}
+
+// ── SPOTIFY WEB PLAYBACK SDK ──────────────────────────────────────────────────
+window.onSpotifyWebPlaybackSDKReady = () => {
+  if (!spotifyToken) return; // will init after auth
+  initPlayer();
+};
+
+function initPlayer() {
+  spotifyPlayer = new Spotify.Player({
+    name: 'ZoneTune',
+    getOAuthToken: async cb => {
+      await ensureToken();
+      cb(spotifyToken);
+    },
+    volume: 0.8,
+  });
+
+  spotifyPlayer.addListener('ready', ({ device_id }) => {
+    spotifyDeviceId = device_id;
+    playerReady = true;
+    console.log('Spotify player ready, device:', device_id);
+    showToast('Spotify player ready ✓');
+  });
+
+  spotifyPlayer.addListener('not_ready', ({ device_id }) => {
+    playerReady = false;
+    console.warn('Player went offline');
+  });
+
+  spotifyPlayer.addListener('player_state_changed', state => {
+    if (!state) return;
+    updatePlayerUI(state);
+  });
+
+  spotifyPlayer.addListener('initialization_error', ({ message }) => {
+    showToast('Player init error: ' + message);
+  });
+  spotifyPlayer.addListener('authentication_error', async ({ message }) => {
+    const ok = await refreshToken();
+    if (!ok) showToast('Spotify auth error — please reload');
+  });
+  spotifyPlayer.addListener('account_error', ({ message }) => {
+    showToast('Spotify Premium required for playback');
+  });
+
+  spotifyPlayer.connect();
+}
+
+// ── SPOTIFY PLAYBACK API ──────────────────────────────────────────────────────
+function extractSpotifyUri(url) {
+  // Handle spotify: URIs directly
+  if (url.startsWith('spotify:')) return url;
+  // Parse https://open.spotify.com/track/xxx or playlist/xxx
+  const m = url.match(/spotify\.com\/(track|playlist|album|artist)\/([a-zA-Z0-9]+)/);
+  if (m) return `spotify:${m[1]}:${m[2]}`;
+  return null;
+}
+
+async function playSpotifyUri(uri) {
+  if (!playerReady || !spotifyDeviceId) {
+    showToast('Player not ready yet…');
+    return;
+  }
+  await ensureToken();
+
+  const isTrack    = uri.startsWith('spotify:track:');
+  const isPlaylist = uri.includes(':playlist:');
+  const isAlbum    = uri.includes(':album:');
+
+  const body = isTrack
+    ? { uris: [uri] }
+    : { context_uri: uri };
+
+  const res = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${spotifyDeviceId}`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': 'Bearer ' + spotifyToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (res.status === 204 || res.status === 200) {
+    currentlyPlaying = true;
+    document.getElementById('nowPlaying').classList.add('show');
+  } else {
+    const err = await res.json().catch(() => ({}));
+    showToast('Playback error: ' + (err.error?.message || res.status));
+  }
+}
+
+async function spotifyTogglePlay() {
+  if (!spotifyPlayer) return;
+  await spotifyPlayer.togglePlay();
+}
+
+async function spotifyNext() {
+  if (!spotifyPlayer) return;
+  await spotifyPlayer.nextTrack();
+}
+
+async function spotifyPrev() {
+  if (!spotifyPlayer) return;
+  await spotifyPlayer.previousTrack();
+}
+
+async function setVolume(val) {
+  if (!spotifyPlayer) return;
+  await spotifyPlayer.setVolume(val / 100);
+}
+
+async function seekTo(e) {
+  if (!spotifyPlayer || !trackDuration) return;
+  const bar = document.getElementById('npBar');
+  const rect = bar.getBoundingClientRect();
+  const pct = (e.clientX - rect.left) / rect.width;
+  await spotifyPlayer.seek(Math.floor(pct * trackDuration));
+}
+
+function updatePlayerUI(state) {
+  if (!state) return;
+  const track = state.track_window?.current_track;
+  if (!track) return;
+
+  currentlyPlaying = !state.paused;
+  trackDuration = state.duration;
+  trackPosition = state.position;
+
+  // Art
+  const artEl = document.getElementById('npArt');
+  const imgUrl = track.album?.images?.[0]?.url;
+  artEl.innerHTML = imgUrl
+    ? `<img src="${imgUrl}" alt="album art">`
+    : `<svg class="np-art-placeholder" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M9.5 8.5l7 3.5-7 3.5V8.5z" fill="currentColor"/></svg>`;
+
+  document.getElementById('npTrack').textContent  = track.name || '—';
+  document.getElementById('npArtist').textContent = (track.artists || []).map(a => a.name).join(', ');
+
+  // Play/pause icon
+  const icon = document.getElementById('npPlayIcon');
+  icon.innerHTML = state.paused
+    ? '<path d="M8 5v14l11-7z"/>'
+    : '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+
+  // Progress
+  updateProgress(state.position, state.duration);
+
+  // Show player bar
+  document.getElementById('nowPlaying').classList.add('show');
+
+  // Kick off local progress timer
+  clearInterval(progressTimer);
+  if (!state.paused) {
+    const startedAt = Date.now();
+    const startPos  = state.position;
+    progressTimer = setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const pos = Math.min(startPos + elapsed, trackDuration);
+      updateProgress(pos, trackDuration);
+      if (pos >= trackDuration) clearInterval(progressTimer);
+    }, 500);
+  }
+}
+
+function updateProgress(pos, dur) {
+  if (!dur) return;
+  const pct = (pos / dur) * 100;
+  document.getElementById('npFill').style.width = pct + '%';
+  document.getElementById('npTimeCur').textContent = msToTime(pos);
+  document.getElementById('npTimeDur').textContent = msToTime(dur);
+}
+
+function msToTime(ms) {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+}
+
+// ── PERSON MARKER ────────────────────────────────────────────────────────────
+let personMarker  = null;
+let personVisible = false;
+let currentZoneId = null;
+
+const personIcon = L.divIcon({
+  className: '',
+  html: `
+    <div class="person-marker-wrap">
+      <div class="person-pulse" id="personPulse"></div>
+      <svg class="person-icon" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="20" cy="37" rx="8" ry="3" fill="rgba(0,0,0,0.4)"/>
+        <circle cx="20" cy="11" r="7" fill="#c8ff47" stroke="#0b0b0e" stroke-width="1.5"/>
+        <circle cx="17.5" cy="10" r="1.2" fill="#0b0b0e"/>
+        <circle cx="22.5" cy="10" r="1.2" fill="#0b0b0e"/>
+        <path d="M17 13 Q20 15.5 23 13" stroke="#0b0b0e" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+        <path d="M11 28 Q11 20 20 20 Q29 20 29 28 L29 34 L11 34 Z" fill="#c8ff47" stroke="#0b0b0e" stroke-width="1.5"/>
+        <path d="M11 22 L6 28" stroke="#c8ff47" stroke-width="3" stroke-linecap="round"/>
+        <path d="M29 22 L34 28" stroke="#c8ff47" stroke-width="3" stroke-linecap="round"/>
+        <path d="M15 34 L13 40" stroke="#c8ff47" stroke-width="3" stroke-linecap="round"/>
+        <path d="M25 34 L27 40" stroke="#c8ff47" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+    </div>
+  `,
+  iconSize: [40, 44],
+  iconAnchor: [20, 44],
+});
+
+function togglePerson() {
+  personVisible ? removePerson() : placePerson();
+}
+
+function placePerson() {
+  const center = map.getCenter();
+  personMarker = L.marker(center, { icon: personIcon, draggable: true, zIndexOffset: 1000 }).addTo(map);
+  personMarker.on('dragstart', () => map.dragging.disable());
+  personMarker.on('drag',    () => checkPersonZone());
+  personMarker.on('dragend', () => { map.dragging.enable(); checkPersonZone(); });
+  personVisible = true;
+  document.getElementById('btnPerson').classList.add('on');
+  document.getElementById('btnPersonLabel').textContent = 'Remove Person';
+  checkPersonZone();
+}
+
+function removePerson() {
+  if (personMarker) { map.removeLayer(personMarker); personMarker = null; }
+  personVisible = false;
+  currentZoneId = null;
+  document.getElementById('btnPerson').classList.remove('on');
+  document.getElementById('btnPersonLabel').textContent = 'Add Person';
+  document.getElementById('nowPlaying').classList.remove('show');
+}
+
+function checkPersonZone() {
+  if (!personMarker) return;
+  const latlng = personMarker.getLatLng();
+  let foundId = null;
+  for (const z of zones) {
+    if (z.layer && pointInLeafletPolygon(latlng, z.layer)) { foundId = z.id; break; }
+  }
+  if (foundId !== currentZoneId) {
+    currentZoneId = foundId;
+    onPersonZoneChange(foundId);
+  }
+}
+
+function pointInLeafletPolygon(latlng, layer) {
+  if (!layer.getBounds().contains(latlng)) return false;
+  const verts = layer.getLatLngs()[0];
+  let inside = false;
+  const x = latlng.lng, y = latlng.lat;
+  for (let i = 0, j = verts.length - 1; i < verts.length; j = i++) {
+    const xi = verts[i].lng, yi = verts[i].lat;
+    const xj = verts[j].lng, yj = verts[j].lat;
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+
+async function onPersonZoneChange(zoneId) {
+  const pulse = document.getElementById('personPulse');
+  if (pulse) pulse.classList.toggle('in-zone', !!zoneId);
+
+  if (!zoneId) {
+    // Left all zones — pause playback
+    if (spotifyPlayer && currentlyPlaying) await spotifyPlayer.pause();
+    document.getElementById('npZoneLabel').textContent = 'Outside zones';
+    return;
+  }
+
+  const z = getZone(zoneId);
+  if (!z) return;
+
+  showToast(`Entered: ${z.name}`);
+  document.getElementById('npZoneLabel').textContent = z.name;
+  document.getElementById('nowPlaying').classList.add('show');
+
+  if (z.spotifyUrl) {
+    const uri = extractSpotifyUri(z.spotifyUrl);
+    if (uri && playerReady) {
+      await playSpotifyUri(uri);
+    } else if (!playerReady) {
+      showToast('Spotify player not ready yet');
+    }
+  } else {
+    // No music — pause whatever is playing
+    if (spotifyPlayer && currentlyPlaying) await spotifyPlayer.pause();
+    document.getElementById('npTrack').textContent  = 'No music assigned';
+    document.getElementById('npArtist').textContent = '';
+  }
+}
+
+// ── SPOTIFY INIT ON LOAD ──────────────────────────────────────────────────────
+async function initSpotify() {
+  // Check for auth code callback
+  const params  = new URLSearchParams(window.location.search);
+  const code    = params.get('code');
+  const errParam = params.get('error');
+
+  if (errParam) {
+    showToast('Spotify auth cancelled');
+    history.replaceState({}, '', window.location.pathname);
+    return;
+  }
+
+  if (code) {
+    const ok = await exchangeCode(code);
+    if (!ok) { showToast('Token exchange failed'); return; }
+  }
+
+  // Check stored token
+  const storedToken  = sessionStorage.getItem('sp_token');
+  const storedExpiry = parseInt(sessionStorage.getItem('sp_expiry') || '0');
+
+  if (storedToken && Date.now() < storedExpiry) {
+    spotifyToken = storedToken;
+    document.getElementById('spOverlay').classList.add('hidden');
+    // SDK may already be ready; init player
+    if (window.Spotify) initPlayer();
+    // else onSpotifyWebPlaybackSDKReady will fire and call initPlayer()
+    return;
+  }
+
+  // Try refresh
+  if (sessionStorage.getItem('sp_refresh')) {
+    const ok = await refreshToken();
+    if (ok) {
+      document.getElementById('spOverlay').classList.add('hidden');
+      if (window.Spotify) initPlayer();
+      return;
+    }
+  }
+
+  // Show login overlay
+  document.getElementById('spOverlay').classList.remove('hidden');
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+render();
+updateChip();
+setTimeout(() => setMode('draw'), 600);
+initSpotify();
+</script>
+</body>
+</html>
