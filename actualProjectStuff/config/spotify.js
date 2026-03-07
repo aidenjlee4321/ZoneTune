@@ -48,13 +48,14 @@ async function playSong() {
 
 async function addToPlaylist(trackUri) {
   // You need to specify playlist ID
-  const playlistId = "YOUR_PLAYLIST_ID";
+  const playlistId = getPlaylist();
   await axios.post(
     `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
     { uris: [trackUri] },
     { headers: { Authorization: `Bearer ${access_token}` } }
   );
 }
+
 
 async function deleteFromPlaylist(trackUri) {
   const playlistId = "YOUR_PLAYLIST_ID";
@@ -67,6 +68,59 @@ async function deleteFromPlaylist(trackUri) {
   );
 }
 
+async function getMyPlaylists() { //HELPER FUNCTION DONT ADD
+  const res = await axios.get("https://api.spotify.com/v1/me/playlists", {
+    headers: { Authorization: `Bearer ${access_token}` }
+  });
+  return res.data.items; // array of playlists
+}
+
+
+//Fix Later
+async function setupStuff() {
+  const name = "RealSoundtrack Playlist";
+  const description = "The playlist for the RealSoundtrack app! Please don't delete.";
+
+  const userRes = await axios.get("https://api.spotify.com/v1/me", {
+    headers: { Authorization: `Bearer ${access_token}` }
+  });
+  const userId = userRes.data.id;
+
+  const playlistRes = await axios.post(
+    `https://api.spotify.com/v1/users/${userId}/playlists`,
+    {
+      name: name,
+      public: false,          // private playlist
+      description: description
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+  let playlist = playlistsRes.data.items.find(pl => pl.name === name);
+
+  if (!playlist) {
+    const playlistRes = await axios.post(
+      `https://api.spotify.com/v1/users/${userId}/playlists`,
+      {
+        name: name,
+        public: false,
+        description: description
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+    playlist = playlistRes.data;
+  }
+  return playlist;
+}
 
 module.exports = {
   setAccessToken,
@@ -75,5 +129,6 @@ module.exports = {
   pauseSong,
   playSong,
   addToPlaylist,
-  deleteFromPlaylist
+  deleteFromPlaylist,
+  setupStuff
 }

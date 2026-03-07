@@ -8,7 +8,8 @@ const {
   pauseSong,
   playSong,
   addToPlaylist,
-  deleteFromPlaylist
+  deleteFromPlaylist,
+  setupStuff
 } = require("../config/spotify")
 
 router.get("/current", async (req, res) => {
@@ -41,6 +42,21 @@ router.post("/delete", async (req, res) => {
   await deleteFromPlaylist(uri); // need to implement?
   res.sendStatus(200);
 })
+
+router.post("/setup-stuff", async (req, res) => {
+  try {
+    const playlist = await setupStuff();
+    res.json({
+      message: `Playlist ready: ${playlist.name}`,
+      id: playlist.id,
+      uri: playlist.uri,
+      description: playlist.description
+    });
+  } catch (err) {
+    console.error(err.response?.data || err.message);
+    res.status(500).send("Failed to setup playlist");
+  }
+});
 
 module.exports = router
 

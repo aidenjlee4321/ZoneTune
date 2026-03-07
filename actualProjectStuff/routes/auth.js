@@ -10,12 +10,13 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 
 router.get("/login", (req, res) => {
-  const scope = [
-    "user-read-playback-state",
-    "user-modify-playback-state",
-    "user-read-currently-playing"
-  ].join(" ");
-
+   const scope = [
+     "user-read-playback-state",
+     "user-modify-playback-state",
+     "user-read-currently-playing",
+     "playlist-modify-public",
+     "playlist-modify-private"
+   ].join(" ");
 
   console.log("REDIRECT_URI in use:", process.env.REDIRECT_URI);
   const authUrl =
