@@ -202,7 +202,7 @@ function updateChip() {
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 function addZone() {
   const inp = document.getElementById('newZoneName');
-  const name = inp.value.trim() || `Zone ${nextId}`;
+  const name = sanitizeName(inp.value.trim()) || `Zone ${nextId}`;
   const color = COLORS[zones.length % COLORS.length];
   const z = { id: nextId++, name, color, playlist: [], shuffle: false, layer: null };
   zones.push(z);
@@ -220,6 +220,9 @@ function deleteZone(id) {
   render();
   updateChip();
 }
+function sanitizeName(val) {
+  return val.replace(/<[^>]*>/g, '').slice(0, 40);
+}
 
 function renameZone(id, val) {
   const z = getZone(id);
@@ -230,7 +233,17 @@ function renameZone(id, val) {
   if (z.layer) attachLayerEvents(z.layer, z);
 }
 
+function sanitizeSpotifyUrl(url) {
+  const trimmed = url.trim();
+  // Only allow spotify: URIs or https://open.spotify.com URLs
+  if (/^spotify:[a-z]+:[a-zA-Z0-9]+$/.test(trimmed)) return trimmed;
+  if (/^https:\/\/open\.spotify\.com\/[a-z]+\/[a-zA-Z0-9]+/.test(trimmed)) return trimmed;
+  return '';
+}
+
 function addTrack(zoneId, url) {
+  const clean = sanitizeSpotifyUrl(url);
+  if (!clean) { showToast('Invalid Spotify URL'); return; }
   const z = getZone(zoneId);
   if (!z || !url.trim()) return;
   const uri = extractSpotifyUri(url.trim());
