@@ -8,16 +8,20 @@ app.use(express.json())
 
 const token = "BQBIbgtV5R__myzqLTYLRbOYNnvxd4nFMQltC-Q7J4t7W0irdEzFJOpJgA0iGbpboJqelSbD8bxYa8eM3nYmBsc32QpJk0au4p0fKGE_GmnVCveZSLaeM07JlgXP0FEfNjSN1P2dbCE"
 
-app.post("/next", async (req,res) => {
-  await axios.post(
-    "https://api.spotify.com/v1/me/player/next",
-    {},
-    {
-      headers: { Authorization: `Bearer ${token}` }
+const playlistRes = await axios.post(
+  `https://api.spotify.com/v1/users/${userId}/playlists`,
+  {
+    name: name,
+    public: false,          // private playlist
+    description: description
+  },
+  {
+    headers: {
+      Authorization: `Bearer ${access_token}`,
+      "Content-Type": "application/json"
     }
-  )
-  res.send("Skipped song")
-})
+  }
+);
 /*Make Token
 curl -X POST "https://accounts.spotify.com/api/token" \
      -H "Content-Type: application/x-www-form-urlencoded" \

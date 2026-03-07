@@ -12,6 +12,7 @@
 <button onclick="play()">Play</button>
 <button onclick="add()">Add to Playlist</button>
 <button onclick="deleteSong()">Remove from Playlist</button>
+<button onclick="setupStuff()">Setup Stuff</button>
 
 
 <pre id="output"></pre>
@@ -53,5 +54,12 @@ async function deleteFromPlaylist() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ uri: trackUri })
   })
+}
+async function setupStuff() {
+  const res = await fetch("/player/setup-stuff", { method: "POST" });
+  const data = await res.json();
+
+  document.getElementById("output").innerText =
+    `${data.message}\nID: ${data.id}\nURI: ${data.uri}\nDescription: ${data.description}`;
 }
 </script>
