@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ZoneTune — Map Your Music</title>
 
+
+
 <!-- Leaflet -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -15,6 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <!-- Spotify Web Playback SDK -->
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
+<script src="https://w.soundcloud.com/player/api.js"></script>
 <!-- Loads Firebase stuff-->
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
@@ -156,7 +159,9 @@
 </div>
 
 <div class="toast" id="toast"></div>
-
+<iframe id="scPlayer" src="https://w.soundcloud.com/player/?url=https://soundcloud.com/placeholder&auto_play=false"
+  style="position:fixed;width:1px;height:1px;bottom:0;left:0;opacity:0;pointer-events:none;" allow="autoplay">
+</iframe>
 <script src="index.js">
 </script>
 </body>
