@@ -296,7 +296,13 @@ function addZoneFromInput() {
 
 function addGroup() {
   const inp = document.getElementById('newGroupName');
-  const name = sanitizeName(inp.value.trim()) || `Group ${nextGroupId}`;
+  const raw = inp.value.trim();
+  const name = sanitizeName(raw) || `Group ${nextGroupId}`;
+  const exists = groups.some(g => g.name.toLowerCase() === name.toLowerCase());
+  if (exists) {
+    showToast('Group already exists.');
+    return;
+  }
   groups.push({ id: nextGroupId++, name });
   inp.value = '';
   saveZones();
