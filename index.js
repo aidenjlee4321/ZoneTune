@@ -39,10 +39,20 @@ async function saveZones() {
     id: z.id,
     name: z.name,
     color: z.color,
-    playlist: z.playlist || [],
-    groupId: z.groupId ?? null,
     shuffle: z.shuffle || false,
-    geoData: z.layer ? JSON.stringify(z.layer.toGeoJSON()) : null
+    groupId: z.groupId ?? null,
+    geoData: z.layer ? JSON.stringify(z.layer.toGeoJSON()) : null,
+    playlist: (z.playlist || []).map(t => ({
+      url: t.url || '',
+      label: t.label || '',
+      type: t.type || 'spotify',
+      // spotify fields
+      uri: t.uri || null,
+      // soundcloud fields
+      permalink: t.permalink || null,
+      artworkUrl: t.artworkUrl || null,
+      trackId: t.trackId || null,
+    })),
   }));
 
   try {
@@ -55,6 +65,45 @@ async function saveZones() {
   } catch (error) {
     console.error("Error saving to cloud:", error);
   }
+}
+
+
+// ── QUEUE MANAGER ─────────────────────────────────────────────────────────────
+let queue = [];
+let queueIndex = -1;
+
+function buildQueue(z) {
+  queue = z.shuffle ? shuffleArray(z.playlist) : [...z.playlist];
+  queueIndex = -1;
+}
+
+async function advanceQueue() {
+  queueIndex++;
+  if (queueIndex >= queue.length) queueIndex = 0;
+  await playQueueItem(queue[queueIndex]);
+}
+
+async function playQueueItem(track) {
+  if (!track) return;
+  if (track.type === 'spotify') {
+    if (scWidget && scReady) scWidget.pause();
+    await playTrackList([track.uri]);
+  } else if (track.type === 'soundcloud') {
+    if (spotifyPlayer && currentlyPlaying) await spotifyPlayer.pause();
+    playSoundcloudTrack(track);
+  }
+}
+
+function playSoundcloudTrack(track) {
+  console.log('playSoundcloudTrack called', track);
+  console.log('scWidget:', scWidget, 'scReady:', scReady);
+  if (!scWidget || !scReady) { showToast('SoundCloud player not ready'); return; }
+  scWidget.load(track.permalink, {
+    auto_play: true,
+    buying: false, liking: false, download: false,
+    sharing: false, show_artwork: false,
+    show_comments: false, show_user: false,
+  });
 }
 
 async function loadZonesFromCloud(uid) {
@@ -83,10 +132,34 @@ async function loadZonesFromCloud(uid) {
           attachLayerEvents(restoredLayer, cloudZone);
         }
         
+        const validatedPlaylist = (cloudZone.playlist || []).map(t => {
+          if (t.type === 'soundcloud') {
+            const permalink = extractSoundcloudPermalink(String(t.url || ''));
+            if (!permalink) return null;
+            return {
+              url: permalink,
+              permalink,
+              label: String(t.label || '').slice(0, 100).replace(/<[^>]*>/g, ''),
+              artworkUrl: t.artworkUrl || null,
+              trackId: t.trackId || null,
+              type: 'soundcloud',
+            };
+          }
+          // Spotify
+          const uri = extractSpotifyUri(String(t.url || ''));
+          if (!uri || !uri.includes(':track:')) return null;
+          return {
+            url: String(t.url || ''),
+            uri,
+            label: String(t.label || '').slice(0, 100).replace(/<[^>]*>/g, ''),
+            type: 'spotify',
+          };
+        }).filter(Boolean);
+
         return {
           ...cloudZone,
           layer: restoredLayer,
-          playlist: cloudZone.playlist || [],
+          playlist: validatedPlaylist,
           shuffle: cloudZone.shuffle || false,
           groupId: cloudZone.groupId ?? null
         };
@@ -347,13 +420,13 @@ function extractSoundcloudPermalink(url) {
 async function fetchSoundcloudLabel(permalink) {
   try {
     const res = await fetch(
-      `https://api.soundcloud.com/resolve?url=${encodeURIComponent(permalink)}&client_id=${SC_CLIENT_ID}`
+      `https://soundcloud.com/oembed?url=${encodeURIComponent(permalink)}&format=json`
     );
     const data = await res.json();
     return {
-      label: (data.title || permalink).slice(0, 100).replace(/<[^>]*>/g, ''),
-      artworkUrl: data.artwork_url || null,
-      trackId: data.id,
+      label: data.title?.slice(0, 100).replace(/<[^>]*>/g, '') || permalink,
+      artworkUrl: data.thumbnail_url || null,
+      trackId: null,
     };
   } catch (e) {
     return { label: permalink, artworkUrl: null, trackId: null };
@@ -545,7 +618,7 @@ function render() {
   </div>  
     ${tracksHtml || '<div class="no-tracks">No tracks yet</div>'}
     <div class="add-track-row">
-      <input class="spotify-inp add-track-inp" placeholder="Paste Spotify track URL…">
+      <input class="spotify-inp add-track-inp" placeholder="Paste Spotify or SoundCloud URL…">
       <button class="add-track-btn" data-zone="${z.id}">Add</button>
     </div>
   `;
@@ -622,6 +695,8 @@ let currentlyPlaying  = false;
 let progressTimer     = null;
 let trackDuration     = 0;
 let trackPosition     = 0;
+let scWidget = null;
+let scReady = false;
 
 // PKCE helpers
 function base64url(buf) {
@@ -1096,15 +1171,11 @@ async function onPersonZoneChange(zoneId) {
   document.getElementById('nowPlaying').classList.add('show');
 
   if (z.playlist && z.playlist.length > 0) {
-    if (playerReady) {
-      const tracks = z.shuffle ? shuffleArray(z.playlist) : z.playlist;
-      const uris = tracks.map(t => t.uri);
-      await playTrackList(uris);
-    } else {
-      showToast('Spotify player not ready yet');
-    }
+    buildQueue(z);
+    await advanceQueue();
   } else {
     if (spotifyPlayer && currentlyPlaying) await spotifyPlayer.pause();
+    if (scWidget && scReady) scWidget.pause();
     document.getElementById('npTrack').textContent = 'No tracks assigned';
     document.getElementById('npArtist').textContent = '';
   }
@@ -1155,6 +1226,22 @@ async function initSpotify() {
   document.getElementById('spOverlay').classList.remove('hidden');
 }
 
+
+function initSoundcloud() {
+  const iframe = document.getElementById('scPlayer');
+  scWidget = SC.Widget(iframe);
+  scWidget.bind(SC.Widget.Events.READY, () => {
+    scReady = true;
+    console.log('SoundCloud widget ready ✓');
+  });
+  scWidget.bind(SC.Widget.Events.FINISH, () => {
+    advanceQueue();
+  });
+  scWidget.bind(SC.Widget.Events.PLAY, () => {
+    console.log('SC PLAY event fired');
+    updatePlayerUIForSoundcloud();
+  });
+}
 // ── BOOT (WRAPPED IN FIREBASE AUTH) ───────────────────────────────────────────
 auth.onAuthStateChanged(async (user) => {  // <-- Notice the 'async' here
   if (user) {
@@ -1167,6 +1254,7 @@ auth.onAuthStateChanged(async (user) => {  // <-- Notice the 'async' here
     updateChip();
     setTimeout(() => setMode('draw'), 600);
     initSpotify(); 
+    initSoundcloud();
   } else {
     document.getElementById('googleOverlay').classList.remove('hidden');
     document.getElementById('spOverlay').classList.add('hidden'); 
