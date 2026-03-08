@@ -66,11 +66,15 @@
   <!-- SIDEBAR -->
   <div class="sidebar">
     <div class="panel">
-      <div class="panel-label">Zones</div>
-      <div class="zones-list" id="zonesList"></div>
+      <div class="panel-label">Groups &amp; Zones</div>
+      <div class="groups-list" id="groupsList"></div>
+      <div class="add-group-row">
+        <input class="add-inp" id="newGroupName" placeholder="+ group name" maxlength="40">
+        <button class="btn btn-secondary" onclick="addGroup()">Add Group</button>
+      </div>
       <div class="add-row">
         <input class="add-inp" id="newZoneName" placeholder="+ zone name" maxlength="40">
-        <button class="btn" onclick="addZone()">Add</button>
+        <button class="btn" onclick="addZoneFromInput()">Add Zone</button>
       </div>
     </div>
 
