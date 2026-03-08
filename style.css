@@ -136,7 +136,10 @@ header {
 .add-group-row { display: flex; gap: 6px; margin-bottom: 8px; }
 .btn-secondary { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
 .btn-secondary:hover { border-color: var(--border-hi); color: var(--text); }
-.zone-drag-handle { cursor: grab; }
+.zone-drag-handle {
+  cursor: grab;
+  touch-action: none;
+}
 .zone-drag-handle:active { cursor: grabbing; }
 .zone-row.draggable { cursor: grab; }
 .zone-row.zone-dragging { opacity: 0.5; }
@@ -150,6 +153,7 @@ header {
   border: 1px solid var(--border);
   background: var(--surface2);
   cursor: pointer;
+  touch-action: manipulation;
   transition: border-color .15s, background .15s;
   animation: slideIn .18s ease;
 }
