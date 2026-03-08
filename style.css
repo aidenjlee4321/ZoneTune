@@ -829,4 +829,42 @@ header {
   }
 
   .leaflet-control-attribution { font-size: 8px !important; }
+
+    .track-vol-wrap {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s;
+      flex-shrink: 0;
+    }
+  
+    .track-row:hover .track-vol-wrap {
+      opacity: 1;
+      pointer-events: all;
+    }
+  
+    .track-vol-icon {
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+  
+    .track-vol-slider {
+      width: 56px;
+      -webkit-appearance: none;
+      height: 3px;
+      background: var(--surface3);
+      border-radius: 2px;
+      cursor: pointer;
+      outline: none;
+    }
+  
+    .track-vol-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer; }
 }

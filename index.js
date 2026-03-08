@@ -30,6 +30,7 @@ let trackDuration = 0;
 let trackPosition = 0;
 let scWidget = null;
 let scReady = false;
+let pendingScVolume = 1;
 
 
 // Initialize Firebase
@@ -69,12 +70,11 @@ async function saveZones() {
       url: t.url || '',
       label: t.label || '',
       type: t.type || 'spotify',
-      // spotify fields
       uri: t.uri || null,
-      // soundcloud fields
       permalink: t.permalink || null,
       artworkUrl: t.artworkUrl || null,
       trackId: t.trackId || null,
+      volume: t.volume ?? 100,
     })),
   }));
 
@@ -108,13 +108,22 @@ async function advanceQueue() {
 
 async function playQueueItem(track) {
   if (!track) return;
+  const vol = (track.volume ?? 100) / 100;
+  syncVolumeSlider(track.volume ?? 100);
   if (track.type === 'spotify') {
     if (scWidget && scReady) scWidget.pause();
+    if (spotifyPlayer) await spotifyPlayer.setVolume(vol);
     await playTrackList([track.uri]);
   } else if (track.type === 'soundcloud') {
     if (spotifyPlayer && currentlyPlaying) await spotifyPlayer.pause();
+    pendingScVolume = track.volume ?? 100;
     playSoundcloudTrack(track);
   }
+}
+
+function syncVolumeSlider(val) {
+  const npVol = document.getElementById('npVol');
+  if (npVol) npVol.value = val;
 }
 
 function playSoundcloudTrack(track) {
@@ -166,6 +175,7 @@ async function loadZonesFromCloud(uid) {
               artworkUrl: t.artworkUrl || null,
               trackId: t.trackId || null,
               type: 'soundcloud',
+              volume: t.volume ?? 100,
             };
           }
           // Spotify
@@ -176,6 +186,7 @@ async function loadZonesFromCloud(uid) {
             uri,
             label: String(t.label || '').slice(0, 100).replace(/<[^>]*>/g, ''),
             type: 'spotify',
+            volume: t.volume ?? 100,
           };
         }).filter(Boolean);
 
@@ -732,7 +743,15 @@ function render() {
            <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.622.622 0 01-.857.207c-2.348-1.435-5.304-1.76-8.785-.964a.622.622 0 11-.277-1.215c3.809-.87 7.076-.496 9.712 1.115a.623.623 0 01.207.857zm1.223-2.722a.78.78 0 01-1.072.257c-2.687-1.652-6.785-2.13-9.965-1.166a.78.78 0 01-.973-.519.781.781 0 01.52-.972c3.633-1.102 8.147-.568 11.233 1.328a.78.78 0 01.257 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 11-.543-1.795c3.528-1.068 9.396-.862 13.105 1.333a.938.938 0 01-.945 1.619z"/>
          </svg>`
     }
-      <span class="track-label" title="${esc(t.url)}">${esc(t.label || t.uri)}</span>
+      <span class="track-label" title="${esc(t.url)}">${esc(t.label || t.uri || '')}</span>
+      <div class="track-vol-wrap">
+        <svg class="track-vol-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <path d="M15.54 8.46a5 5 0 010 7.07"/>
+        </svg>
+        <input class="track-vol-slider" type="range" min="0" max="100" value="${t.volume ?? 100}"
+          data-zone="${z.id}" data-idx="${i}">
+      </div>
       <button class="track-del" data-zone="${z.id}" data-idx="${i}">✕</button>
     </div>
   `).join('');
@@ -778,6 +797,27 @@ function render() {
       e.stopPropagation();
       toggleShuffle(z.id);
     });
+
+    div.querySelectorAll('.track-vol-slider').forEach(slider => {
+      slider.addEventListener('input', e => {
+        e.stopPropagation();
+        const zid = +slider.dataset.zone;
+        const idx = +slider.dataset.idx;
+        const zone = getZone(zid);
+        if (!zone) return;
+        zone.playlist[idx].volume = +slider.value;
+        if (queue[queueIndex] === zone.playlist[idx]) {
+          const vol = +slider.value / 100;
+          syncVolumeSlider(+slider.value);
+          if (zone.playlist[idx].type === 'spotify' && spotifyPlayer) {
+            spotifyPlayer.setVolume(vol);
+          } else if (zone.playlist[idx].type === 'soundcloud' && scWidget && scReady) {
+            scWidget.setVolume(+slider.value);
+          }
+        }
+      });
+        slider.addEventListener('change', () => saveZones());
+      });
 
     ml.appendChild(div);
   });
@@ -1026,8 +1066,20 @@ async function spotifyPrev() {
 }
 
 async function setVolume(val) {
-  if (!spotifyPlayer) return;
-  await spotifyPlayer.setVolume(val / 100);
+  const track = queue[queueIndex];
+  if (track) {
+    track.volume = +val;
+    // Update the matching per-track slider if visible
+    const slider = document.querySelector(
+      `.track-vol-slider[data-zone="${currentZoneId}"][data-idx="${queueIndex}"]`
+    );
+    if (slider) slider.value = val;
+  }
+  if (track?.type === 'soundcloud') {
+    if (scWidget && scReady) scWidget.setVolume(+val);
+  } else {
+    if (spotifyPlayer) await spotifyPlayer.setVolume(val / 100);
+  }
 }
 
 async function seekTo(e) {
@@ -1388,6 +1440,7 @@ function initSoundcloud() {
   });
   scWidget.bind(SC.Widget.Events.PLAY, () => {
     console.log('SC PLAY event fired');
+    scWidget.setVolume(pendingScVolume);
     updatePlayerUIForSoundcloud();
   });
 }
