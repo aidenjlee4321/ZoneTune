@@ -795,4 +795,18 @@ header {
   }
 
   .leaflet-control-attribution { font-size: 8px !important; }
+
+    .track-type-badge {
+      font-size: 9px;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+  
+    .track-type-badge.spotify {
+      color: #1db954;
+    }
+  
+    .track-type-badge.soundcloud {
+      color: #ff5500;
+    }
 }

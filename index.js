@@ -26,6 +26,7 @@ function googleLogout() {
 
 // ── PALETTE ──────────────────────────────────────────────────────────────────
 const COLORS = ['#c8ff47','#47cfff','#ff5f5f','#ffd166','#c77dff','#ff9f1c','#06d6a0','#ef476f'];
+const SC_CLIENT_ID = 'L8SGpVAf1pxzBWSkGWrt01k6lOcsa1EZ';
 
 // ── PERSISTENCE ───────────────────────────────────────────────────────────────
 async function saveZones() {
@@ -327,6 +328,36 @@ function deleteZone(id) {
   render();
   updateChip();
 }
+
+function detectTrackType(url) {
+  if (/^spotify:|open\.spotify\.com/.test(url)) return 'spotify';
+  if (/soundcloud\.com\/[^/]+\/[^/]+/.test(url)) return 'soundcloud';
+  return null;
+}
+function extractSoundcloudPermalink(url) {
+  // Normalize to just https://soundcloud.com/artist/track
+  try {
+    const u = new URL(url);
+    if (u.hostname === 'soundcloud.com') return url.split('?')[0];
+  } catch (e) { }
+  return null;
+}
+async function fetchSoundcloudLabel(permalink) {
+  try {
+    const res = await fetch(
+      `https://api.soundcloud.com/resolve?url=${encodeURIComponent(permalink)}&client_id=${SC_CLIENT_ID}`
+    );
+    const data = await res.json();
+    return {
+      label: (data.title || permalink).slice(0, 100).replace(/<[^>]*>/g, ''),
+      artworkUrl: data.artwork_url || null,
+      trackId: data.id,
+    };
+  } catch (e) {
+    return { label: permalink, artworkUrl: null, trackId: null };
+  }
+}
+
 function sanitizeName(val) {
   return val.replace(/<[^>]*>/g, '').slice(0, 40);
 }
@@ -348,7 +379,7 @@ function sanitizeSpotifyUrl(url) {
   return '';
 }
 
-function addTrack(zoneId, url) {
+async function addTrack(zoneId, url) {
   const clean = sanitizeSpotifyUrl(url);
   if (!clean) { showToast('Invalid Spotify URL'); return; }
   const z = getZone(zoneId);
@@ -362,6 +393,27 @@ function addTrack(zoneId, url) {
     saveZones();
     render();
   });
+  if (z.playlist.length >= 100) { showToast('Max 100 tracks per zone'); return; }
+
+  const type = detectTrackType(url.trim());
+  if (!type) { showToast('Paste a Spotify or SoundCloud track URL'); return; }
+
+  if (type === 'spotify') {
+    const uri = extractSpotifyUri(url.trim());
+    if (!uri || !uri.includes(':track:')) { showToast('Please paste a Spotify track URL'); return; }
+    const label = await fetchTrackLabel(url.trim(), uri);
+    z.playlist.push({ url: url.trim(), uri, label, type: 'spotify' });
+
+  } else if (type === 'soundcloud') {
+    const permalink = extractSoundcloudPermalink(url.trim());
+    if (!permalink) { showToast('Invalid SoundCloud URL'); return; }
+    showToast('Fetching track info…');
+    const { label, artworkUrl, trackId } = await fetchSoundcloudLabel(permalink);
+    z.playlist.push({ url: permalink, permalink, label, artworkUrl, trackId, type: 'soundcloud' });
+  }
+
+  saveZones();
+  render();
 }
 
 function removeTrack(zoneId, index) {
@@ -435,6 +487,32 @@ function setupDropTarget(headerEl, groupId) {
   });
 }
 
+function updatePlayerUIForSoundcloud() {
+  const track = queue[queueIndex];
+  if (!track) return;
+
+  document.getElementById('npTrack').textContent = track.label || 'SoundCloud track';
+  document.getElementById('npArtist').textContent = 'SoundCloud';
+
+  const artEl = document.getElementById('npArt');
+  artEl.innerHTML = track.artworkUrl
+    ? `<img src="${track.artworkUrl}" alt="artwork">`
+    : `<svg class="np-art-placeholder" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M9.5 8.5l7 3.5-7 3.5V8.5z" fill="currentColor"/></svg>`;
+
+  document.getElementById('nowPlaying').classList.add('show');
+
+  // Progress polling
+  clearInterval(progressTimer);
+  progressTimer = setInterval(() => {
+    if (!scWidget || !scReady) return;
+    scWidget.getPosition(pos => {
+      scWidget.getDuration(dur => {
+        updateProgress(pos, dur);
+      });
+    });
+  }, 500);
+}
+
 // ── RENDER SIDEBAR ────────────────────────────────────────────────────────────
 function render() {
   const gl = document.getElementById('groupsList');
@@ -483,6 +561,7 @@ function render() {
     <div class="track-row">
       <svg class="track-icon" viewBox="0 0 24 24" fill="${z.color}" width="12" height="12">
         <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.622.622 0 01-.857.207c-2.348-1.435-5.304-1.76-8.785-.964a.622.622 0 11-.277-1.215c3.809-.87 7.076-.496 9.712 1.115a.623.623 0 01.207.857zm1.223-2.722a.78.78 0 01-1.072.257c-2.687-1.652-6.785-2.13-9.965-1.166a.78.78 0 01-.973-.519.781.781 0 01.52-.972c3.633-1.102 8.147-.568 11.233 1.328a.78.78 0 01.257 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 11-.543-1.795c3.528-1.068 9.396-.862 13.105 1.333a.938.938 0 01-.945 1.619z"/></svg>
+      <span class="track-type-badge ${t.type}">${t.type === 'spotify' ? '♫' : '☁'}</span>
       <span class="track-label" title="${esc(t.url)}">${esc(t.label || t.uri)}</span>
       <button class="track-del" data-zone="${z.id}" data-idx="${i}">✕</button>
     </div>
@@ -709,6 +788,24 @@ function initPlayer() {
   });
 
   spotifyPlayer.connect();
+}
+
+let scWidget = null;
+let scReady = false;
+
+function initSoundcloud() {
+  const iframe = document.getElementById('scPlayer');
+  scWidget = SC.Widget(iframe);
+  scWidget.bind(SC.Widget.Events.READY, () => {
+    scReady = true;
+    console.log('SoundCloud widget ready');
+  });
+  scWidget.bind(SC.Widget.Events.FINISH, () => {
+    advanceQueue();
+  });
+  scWidget.bind(SC.Widget.Events.PLAY, () => {
+    updatePlayerUIForSoundcloud();
+  });
 }
 
 // ── SPOTIFY PLAYBACK API ──────────────────────────────────────────────────────
@@ -958,13 +1055,49 @@ function pointInLeafletPolygon(latlng, layer) {
   return inside;
 }
 
+// ── QUEUE MANAGER ─────────────────────────────────────────────────────────────
+let queue = [];
+let queueIndex = -1;
+
+function buildQueue(z) {
+  queue = z.shuffle ? shuffleArray(z.playlist) : [...z.playlist];
+  queueIndex = -1;
+}
+
+async function advanceQueue() {
+  queueIndex++;
+  if (queueIndex >= queue.length) queueIndex = 0;
+  await playQueueItem(queue[queueIndex]);
+}
+
+async function playQueueItem(track) {
+  if (!track) return;
+  if (track.type === 'spotify') {
+    if (scWidget && scReady) scWidget.pause();
+    await playTrackList([track.uri]);
+  } else if (track.type === 'soundcloud') {
+    if (spotifyPlayer && currentlyPlaying) await spotifyPlayer.pause();
+    playSoundcloudTrack(track);
+  }
+}
+
+function playSoundcloudTrack(track) {
+  if (!scWidget || !scReady) { showToast('SoundCloud player not ready'); return; }
+  scWidget.load(track.permalink, {
+    auto_play: true,
+    buying: false, liking: false, download: false,
+    sharing: false, show_artwork: false,
+    show_comments: false, show_user: false,
+  });
+}
+
 async function onPersonZoneChange(zoneId) {
   const pulse = document.getElementById('personPulse');
   if (pulse) pulse.classList.toggle('in-zone', !!zoneId);
 
   if (!zoneId) {
-    // Left all zones — pause playback
     if (spotifyPlayer && currentlyPlaying) await spotifyPlayer.pause();
+    if (scWidget && scReady) scWidget.pause();
     document.getElementById('npZoneLabel').textContent = 'Outside zones';
     return;
   }
@@ -977,15 +1110,11 @@ async function onPersonZoneChange(zoneId) {
   document.getElementById('nowPlaying').classList.add('show');
 
   if (z.playlist && z.playlist.length > 0) {
-    if (playerReady) {
-      const tracks = z.shuffle ? shuffleArray(z.playlist) : z.playlist;
-      const uris = tracks.map(t => t.uri);
-      await playTrackList(uris);
-    } else {
-      showToast('Spotify player not ready yet');
-    }
+    buildQueue(z);
+    await advanceQueue();
   } else {
     if (spotifyPlayer && currentlyPlaying) await spotifyPlayer.pause();
+    if (scWidget && scReady) scWidget.pause();
     document.getElementById('npTrack').textContent = 'No tracks assigned';
     document.getElementById('npArtist').textContent = '';
   }
@@ -1048,6 +1177,7 @@ auth.onAuthStateChanged(async (user) => {  // <-- Notice the 'async' here
     updateChip();
     setTimeout(() => setMode('draw'), 600);
     initSpotify(); 
+    initSoundcloud();
   } else {
     document.getElementById('googleOverlay').classList.remove('hidden');
     document.getElementById('spOverlay').classList.add('hidden'); 
