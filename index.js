@@ -443,12 +443,17 @@ function clearAllZones() {
   if (mode === 'draw') startDraw();
 }
 
+// Touch drag state (for mobile - press & hold 1s to enter drag mode)
+let touchDragState = null;
+let touchDragJustEnded = false;
+const HOLD_DURATION_MS = 1000;
+
 function appendZoneRow(parent, z) {
   const div = document.createElement('div');
   div.className = 'zone-row' + (z.id === selectedZoneId ? ' selected' : '');
   div.dataset.zoneId = z.id;
   div.innerHTML = `
-    <div class="zone-pip zone-drag-handle" style="background:${z.color}" title="Drag to move" draggable="true"></div>
+    <div class="zone-pip zone-drag-handle" style="background:${z.color}" title="Hold to drag" draggable="true"></div>
     <input class="zone-name-inp" value="${esc(z.name)}" maxlength="40" placeholder="Zone name">
     <span class="zone-mapped" title="${z.layer ? 'Mapped' : 'Not drawn yet'}">${z.layer ? '◉' : '○'}</span>
     <button class="del-btn" title="Delete zone">✕</button>
@@ -459,21 +464,102 @@ function appendZoneRow(parent, z) {
 
   function handleSelect(e) {
     if (e.target.closest('.del-btn')) return;
+    if (touchDragState || touchDragJustEnded) return;
     setSelected(z.id);
   }
   div.addEventListener('click', handleSelect);
   div.addEventListener('touchend', handleSelect, { passive: true });
 
+  // Mouse drag (desktop)
   pip.addEventListener('dragstart', e => {
     e.dataTransfer.setData('text/plain', z.id);
     e.dataTransfer.effectAllowed = 'move';
     div.classList.add('zone-dragging');
   });
   pip.addEventListener('dragend', () => div.classList.remove('zone-dragging'));
+
+  // Touch drag (mobile): hold 1 second to enter drag mode
+  pip.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    touchDragState = {
+      zoneId: z.id,
+      originalGroupId: z.groupId,
+      startX: t.clientX,
+      startY: t.clientY,
+      dragMode: false,
+      lastTarget: null,
+      holdTimer: setTimeout(() => {
+        if (!touchDragState || touchDragState.zoneId !== z.id) return;
+        touchDragState.dragMode = true;
+        touchDragState.holdTimer = null;
+        div.classList.add('zone-dragging');
+        showToast('Drag to move');
+      }, HOLD_DURATION_MS)
+    };
+  }, { passive: true });
+
+  pip.addEventListener('touchmove', e => {
+    if (!touchDragState || touchDragState.zoneId !== z.id) return;
+    const t = e.touches[0];
+    const dx = Math.abs(t.clientX - touchDragState.startX);
+    const dy = Math.abs(t.clientY - touchDragState.startY);
+    if (!touchDragState.dragMode) {
+      if (dx > 8 || dy > 8) {
+        if (touchDragState.holdTimer) {
+          clearTimeout(touchDragState.holdTimer);
+          touchDragState.holdTimer = null;
+        }
+        touchDragState = null;
+      }
+      return;
+    }
+    e.preventDefault();
+    const el = document.elementFromPoint(t.clientX, t.clientY);
+    const header = el?.closest('.group-header.drop-target');
+    document.querySelectorAll('.group-header.drop-target').forEach(h => h.classList.remove('drop-target-active'));
+    if (header) header.classList.add('drop-target-active');
+    touchDragState.lastTarget = header;
+  }, { passive: false });
+
+  pip.addEventListener('touchend', e => {
+    if (!touchDragState || touchDragState.zoneId !== z.id) return;
+    if (touchDragState.holdTimer) {
+      clearTimeout(touchDragState.holdTimer);
+      touchDragState.holdTimer = null;
+    }
+    if (touchDragState.dragMode) {
+      e.preventDefault();
+      touchDragJustEnded = true;
+      setTimeout(() => { touchDragJustEnded = false; }, 100);
+      const header = touchDragState.lastTarget;
+      document.querySelectorAll('.group-header.drop-target').forEach(h => h.classList.remove('drop-target-active'));
+      if (header) {
+        const gid = header.dataset.groupId;
+        const dropGroupId = gid === 'null' ? null : +gid;
+        if (dropGroupId !== touchDragState.originalGroupId) {
+          moveZoneToGroup(z.id, dropGroupId);
+        }
+      }
+    }
+    div.classList.remove('zone-dragging');
+    touchDragState = null;
+  }, { passive: false });
+
+  pip.addEventListener('touchcancel', () => {
+    if (touchDragState?.zoneId === z.id) {
+      if (touchDragState.holdTimer) clearTimeout(touchDragState.holdTimer);
+      div.classList.remove('zone-dragging');
+      document.querySelectorAll('.group-header.drop-target').forEach(h => h.classList.remove('drop-target-active'));
+      touchDragState = null;
+    }
+  }, { passive: true });
+
   parent.appendChild(div);
 }
 
 function setupDropTarget(headerEl, groupId) {
+  headerEl.dataset.groupId = String(groupId);
   headerEl.addEventListener('dragover', e => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
