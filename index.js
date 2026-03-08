@@ -1010,15 +1010,6 @@ async function spotifyPrev() {
   queueIndex = queueIndex <= 1 ? -1 : queueIndex - 2;
   await advanceQueue();
 }
-async function spotifyNext() {
-  if (!spotifyPlayer) return;
-  await spotifyPlayer.nextTrack();
-}
-
-async function spotifyPrev() {
-  if (!spotifyPlayer) return;
-  await spotifyPlayer.previousTrack();
-}
 
 async function setVolume(val) {
   if (!spotifyPlayer) return;
@@ -1096,11 +1087,11 @@ function updatePlayerUI(state) {
     }, 500);
   }
 
-  if (state.paused && state.position === 0 &&
+  if (state.paused && state.position === 0 && 
     state.track_window?.previous_tracks?.length > 0 &&
     !state.track_window?.current_track) {
-    advanceQueue();
-  }
+  advanceQueue();
+}
 }
 
 function updatePlayerUIForSoundcloud() {
