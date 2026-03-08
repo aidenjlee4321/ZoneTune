@@ -399,26 +399,30 @@ function clearAllZones() {
 function appendZoneRow(parent, z) {
   const div = document.createElement('div');
   div.className = 'zone-row' + (z.id === selectedZoneId ? ' selected' : '');
-  div.draggable = true;
   div.dataset.zoneId = z.id;
   div.innerHTML = `
-    <div class="zone-pip zone-drag-handle" style="background:${z.color}" title="Drag to move"></div>
+    <div class="zone-pip zone-drag-handle" style="background:${z.color}" title="Drag to move" draggable="true"></div>
     <input class="zone-name-inp" value="${esc(z.name)}" maxlength="40" placeholder="Zone name">
     <span class="zone-mapped" title="${z.layer ? 'Mapped' : 'Not drawn yet'}">${z.layer ? '◉' : '○'}</span>
     <button class="del-btn" title="Delete zone">✕</button>
   `;
+  const pip = div.querySelector('.zone-drag-handle');
   div.querySelector('.zone-name-inp').addEventListener('input', e => renameZone(z.id, e.target.value));
   div.querySelector('.del-btn').addEventListener('click', e => { e.stopPropagation(); deleteZone(z.id); });
-  div.addEventListener('click', e => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+
+  function handleSelect(e) {
+    if (e.target.closest('.del-btn')) return;
     setSelected(z.id);
-  });
-  div.addEventListener('dragstart', e => {
+  }
+  div.addEventListener('click', handleSelect);
+  div.addEventListener('touchend', handleSelect, { passive: true });
+
+  pip.addEventListener('dragstart', e => {
     e.dataTransfer.setData('text/plain', z.id);
     e.dataTransfer.effectAllowed = 'move';
     div.classList.add('zone-dragging');
   });
-  div.addEventListener('dragend', () => div.classList.remove('zone-dragging'));
+  pip.addEventListener('dragend', () => div.classList.remove('zone-dragging'));
   parent.appendChild(div);
 }
 
