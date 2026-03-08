@@ -439,36 +439,6 @@ async function fetchSoundcloudLabel(permalink) {
   }
 }
 
-
-function detectTrackType(url) {
-  if (/^spotify:|open\.spotify\.com/.test(url)) return 'spotify';
-  if (/soundcloud\.com\/[^/]+\/[^/]+/.test(url)) return 'soundcloud';
-  return null;
-}
-function extractSoundcloudPermalink(url) {
-  // Normalize to just https://soundcloud.com/artist/track
-  try {
-    const u = new URL(url);
-    if (u.hostname === 'soundcloud.com') return url.split('?')[0];
-  } catch (e) { }
-  return null;
-}
-async function fetchSoundcloudLabel(permalink) {
-  try {
-    const res = await fetch(
-      `https://soundcloud.com/oembed?url=${encodeURIComponent(permalink)}&format=json`
-    );
-    const data = await res.json();
-    return {
-      label: data.title?.slice(0, 100).replace(/<[^>]*>/g, '') || permalink,
-      artworkUrl: data.thumbnail_url || null,
-      trackId: null,
-    };
-  } catch (e) {
-    return { label: permalink, artworkUrl: null, trackId: null };
-  }
-}
-
 function sanitizeName(val) {
   return val.replace(/<[^>]*>/g, '').slice(0, 40);
 }
