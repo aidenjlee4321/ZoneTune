@@ -1007,7 +1007,7 @@ async function spotifyNext() {
 }
 
 async function spotifyPrev() {
-  queueIndex = queueIndex <= 1 ? -1 : queueIndex - 2;
+  queueIndex = queueIndex <= 0 ? queue.length - 2 : queueIndex - 2;
   await advanceQueue();
 }
 
