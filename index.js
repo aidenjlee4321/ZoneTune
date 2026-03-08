@@ -9,6 +9,29 @@ const firebaseConfig = {
   measurementId: "G-J9JFTYDXJ9"
 };
 
+
+const SP_CLIENT_ID = '08b989759dcd46fab3f9126cf581f628';
+const SP_REDIRECT_URI = window.location.href.split('?')[0].split('#')[0];
+const SP_SCOPES = [
+  'streaming',
+  'user-read-email',
+  'user-read-private',
+  'user-read-playback-state',
+  'user-modify-playback-state',
+].join(' ');
+
+let spotifyToken = null;
+let spotifyPlayer = null;
+let spotifyDeviceId = null;
+let playerReady = false;
+let currentlyPlaying = false;
+let progressTimer = null;
+let trackDuration = 0;
+let trackPosition = 0;
+let scWidget = null;
+let scReady = false;
+
+
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
@@ -426,13 +449,13 @@ function extractSoundcloudPermalink(url) {
 async function fetchSoundcloudLabel(permalink) {
   try {
     const res = await fetch(
-      `https://api.soundcloud.com/resolve?url=${encodeURIComponent(permalink)}&client_id=${SC_CLIENT_ID}`
+      `https://soundcloud.com/oembed?url=${encodeURIComponent(permalink)}&format=json`
     );
     const data = await res.json();
     return {
       label: (data.title || permalink).slice(0, 100).replace(/<[^>]*>/g, ''),
-      artworkUrl: data.artwork_url || null,
-      trackId: data.id,
+      artworkUrl: data.thumbnail_url || null,
+      trackId: null,
     };
   } catch (e) {
     return { label: permalink, artworkUrl: null, trackId: null };
@@ -773,26 +796,7 @@ if (newGroupEl) newGroupEl.addEventListener('keydown', e => {
 });
 
 // ── SPOTIFY AUTH (PKCE) ───────────────────────────────────────────────────────
-const SP_CLIENT_ID     = '08b989759dcd46fab3f9126cf581f628';
-const SP_REDIRECT_URI  = window.location.href.split('?')[0].split('#')[0];
-const SP_SCOPES        = [
-  'streaming',
-  'user-read-email',
-  'user-read-private',
-  'user-read-playback-state',
-  'user-modify-playback-state',
-].join(' ');
 
-let spotifyToken      = null;
-let spotifyPlayer     = null;
-let spotifyDeviceId   = null;
-let playerReady       = false;
-let currentlyPlaying  = false;
-let progressTimer     = null;
-let trackDuration     = 0;
-let trackPosition     = 0;
-let scWidget = null;
-let scReady = false;
 
 // PKCE helpers
 function base64url(buf) {
@@ -908,6 +912,7 @@ function initPlayer() {
 
   spotifyPlayer.addListener('player_state_changed', state => {
     if (!state) return;
+    // Only update UI,  on't advance queue — advanceQueue is called explicitly
     updatePlayerUI(state);
   });
 
@@ -989,10 +994,22 @@ async function playTrackList(uris) {
 }
 
 async function spotifyTogglePlay() {
-  if (!spotifyPlayer) return;
-  await spotifyPlayer.togglePlay();
+  const track = queue[queueIndex];
+  if (track?.type === 'soundcloud') {
+    if (scWidget && scReady) scWidget.toggle();
+  } else {
+    if (spotifyPlayer) await spotifyPlayer.togglePlay();
+  }
 }
 
+async function spotifyNext() {
+  await advanceQueue();
+}
+
+async function spotifyPrev() {
+  queueIndex = queueIndex <= 1 ? -1 : queueIndex - 2;
+  await advanceQueue();
+}
 async function spotifyNext() {
   if (!spotifyPlayer) return;
   await spotifyPlayer.nextTrack();
@@ -1078,6 +1095,37 @@ function updatePlayerUI(state) {
       if (pos >= trackDuration) clearInterval(progressTimer);
     }, 500);
   }
+
+  if (state.paused && state.position === 0 &&
+    state.track_window?.previous_tracks?.length > 0 &&
+    !state.track_window?.current_track) {
+    advanceQueue();
+  }
+}
+
+function updatePlayerUIForSoundcloud() {
+  const track = queue[queueIndex];
+  if (!track) return;
+
+  document.getElementById('npTrack').textContent = track.label || 'SoundCloud track';
+  document.getElementById('npArtist').textContent = 'SoundCloud';
+
+  const artEl = document.getElementById('npArt');
+  artEl.innerHTML = track.artworkUrl
+    ? `<img src="${track.artworkUrl}" alt="artwork">`
+    : `<svg class="np-art-placeholder" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M9.5 8.5l7 3.5-7 3.5V8.5z" fill="currentColor"/></svg>`;
+
+  document.getElementById('nowPlaying').classList.add('show');
+
+  clearInterval(progressTimer);
+  progressTimer = setInterval(() => {
+    if (!scWidget || !scReady) return;
+    scWidget.getPosition(pos => {
+      scWidget.getDuration(dur => {
+        updateProgress(pos, dur);
+      });
+    });
+  }, 500);
 }
 
 function updateProgress(pos, dur) {
@@ -1253,8 +1301,8 @@ async function onPersonZoneChange(zoneId) {
   if (pulse) pulse.classList.toggle('in-zone', !!zoneId);
 
   if (!zoneId) {
-    // Left all zones — pause playback
     if (spotifyPlayer && currentlyPlaying) await spotifyPlayer.pause();
+    if (scWidget && scReady) scWidget.pause();
     document.getElementById('npZoneLabel').textContent = 'Outside zones';
     return;
   }
