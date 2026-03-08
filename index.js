@@ -39,14 +39,17 @@ async function saveZones() {
     name: z.name,
     color: z.color,
     playlist: z.playlist || [],
-    // Convert the Leaflet map shape into saveable coordinates
+    groupId: z.groupId ?? null,
+    shuffle: z.shuffle || false,
     geoData: z.layer ? JSON.stringify(z.layer.toGeoJSON()) : null
   }));
 
   try {
     await db.collection("users").doc(user.uid).set({
       savedZones: cloudData,
-      nextId: nextId
+      savedGroups: groups,
+      nextId: nextId,
+      nextGroupId: nextGroupId
     });
   } catch (error) {
     console.error("Error saving to cloud:", error);
@@ -60,6 +63,8 @@ async function loadZonesFromCloud(uid) {
     if (doc.exists) {
       const data = doc.data();
       nextId = data.nextId || 3;
+      nextGroupId = data.nextGroupId || 1;
+      groups = data.savedGroups || [];
       
       drawnItems.clearLayers(); // Clear map before redrawing
       
@@ -77,7 +82,13 @@ async function loadZonesFromCloud(uid) {
           attachLayerEvents(restoredLayer, cloudZone);
         }
         
-        return { ...cloudZone, layer: restoredLayer };
+        return {
+          ...cloudZone,
+          layer: restoredLayer,
+          playlist: cloudZone.playlist || [],
+          shuffle: cloudZone.shuffle || false,
+          groupId: cloudZone.groupId ?? null
+        };
       });
 
       console.log(zones)
@@ -91,10 +102,12 @@ async function loadZonesFromCloud(uid) {
 
 // ── STATE ────────────────────────────────────────────────────────────────────
 let zones = [
-  { id: 1, name: 'Zone A', color: COLORS[0], playlist: [], layer: null },
-  { id: 2, name: 'Zone B', color: COLORS[1], playlist: [], layer: null },
+  { id: 1, name: 'Zone A', color: COLORS[0], playlist: [], shuffle: false, layer: null, groupId: null },
+  { id: 2, name: 'Zone B', color: COLORS[1], playlist: [], shuffle: false, layer: null, groupId: null },
 ];
 let nextId = parseInt(localStorage.getItem('zonetune_nextId') || '3');
+let groups = [];
+let nextGroupId = 1;
 let selectedZoneId = zones[0].id;   // ← must come AFTER zones is defined
 let mode = 'draw';
 let drawHandler = null;
@@ -265,17 +278,43 @@ function updateChip() {
 }
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
-function addZone() {
+function addZoneFromInput() {
   const inp = document.getElementById('newZoneName');
   const name = sanitizeName(inp.value.trim()) || `Zone ${nextId}`;
   const color = COLORS[zones.length % COLORS.length];
-  const z = { id: nextId++, name, color, playlist: [], shuffle: false, layer: null };
+  const z = { id: nextId++, name, color, playlist: [], shuffle: false, layer: null, groupId: null };
   zones.push(z);
   inp.value = '';
 
   setSelected(z.id);
 
   saveZones();
+  render();
+}
+
+function addGroup() {
+  const inp = document.getElementById('newGroupName');
+  const name = sanitizeName(inp.value.trim()) || `Group ${nextGroupId}`;
+  groups.push({ id: nextGroupId++, name });
+  inp.value = '';
+  saveZones();
+  render();
+}
+
+
+function deleteGroup(id) {
+  zones.forEach(z => { if (z.groupId === id) z.groupId = null; });
+  groups = groups.filter(g => g.id !== id);
+  saveZones();
+  render();
+}
+
+function moveZoneToGroup(zoneId, groupId) {
+  const z = getZone(zoneId);
+  if (!z) return;
+  z.groupId = groupId;
+  saveZones();
+  render();
 }
 
 function deleteZone(id) {
@@ -350,41 +389,88 @@ async function fetchTrackLabel(url, uri) {
 function clearAllZones() {
   if (!confirm('Remove all zone shapes from the map?')) return;
   zones.forEach(z => { if (z.layer) { drawnItems.removeLayer(z.layer); z.layer = null; } });
-  function saveZones() {
-  if (!confirm('Remove all zone shapes from the map?')) return;
-  zones.forEach(z => { if (z.layer) { drawnItems.removeLayer(z.layer); z.layer = null; } });
-  
-  saveZones(); // <--- ADD THIS LINE HERE!
-  
-  render();
-  if (mode === 'draw') startDraw();
-}
+  saveZones();
   render();
   if (mode === 'draw') startDraw();
 }
 
+function appendZoneRow(parent, z) {
+  const div = document.createElement('div');
+  div.className = 'zone-row' + (z.id === selectedZoneId ? ' selected' : '');
+  div.draggable = true;
+  div.dataset.zoneId = z.id;
+  div.innerHTML = `
+    <div class="zone-pip zone-drag-handle" style="background:${z.color}" title="Drag to move"></div>
+    <input class="zone-name-inp" value="${esc(z.name)}" maxlength="40" placeholder="Zone name">
+    <span class="zone-mapped" title="${z.layer ? 'Mapped' : 'Not drawn yet'}">${z.layer ? '◉' : '○'}</span>
+    <button class="del-btn" title="Delete zone">✕</button>
+  `;
+  div.querySelector('.zone-name-inp').addEventListener('input', e => renameZone(z.id, e.target.value));
+  div.querySelector('.del-btn').addEventListener('click', e => { e.stopPropagation(); deleteZone(z.id); });
+  div.addEventListener('click', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+    setSelected(z.id);
+  });
+  div.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('text/plain', z.id);
+    e.dataTransfer.effectAllowed = 'move';
+    div.classList.add('zone-dragging');
+  });
+  div.addEventListener('dragend', () => div.classList.remove('zone-dragging'));
+  parent.appendChild(div);
+}
+
+function setupDropTarget(headerEl, groupId) {
+  headerEl.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    headerEl.classList.add('drop-target-active');
+  });
+  headerEl.addEventListener('dragleave', () => headerEl.classList.remove('drop-target-active'));
+  headerEl.addEventListener('drop', e => {
+    e.preventDefault();
+    headerEl.classList.remove('drop-target-active');
+    const zoneId = +e.dataTransfer.getData('text/plain');
+    if (zoneId) moveZoneToGroup(zoneId, groupId);
+  });
+}
+
 // ── RENDER SIDEBAR ────────────────────────────────────────────────────────────
 function render() {
-  // Zones list
-  const zl = document.getElementById('zonesList');
-  zl.innerHTML = '';
-  zones.forEach(z => {
-    const div = document.createElement('div');
-    div.className = 'zone-row' + (z.id === selectedZoneId ? ' selected' : '');
-    div.innerHTML = `
-      <div class="zone-pip" style="background:${z.color}"></div>
-      <input class="zone-name-inp" value="${esc(z.name)}" maxlength="40" placeholder="Zone name">
-      <span class="zone-mapped" title="${z.layer ? 'Mapped' : 'Not drawn yet'}">${z.layer ? '◉' : '○'}</span>
-      <button class="del-btn" title="Delete zone">✕</button>
+  const gl = document.getElementById('groupsList');
+  gl.innerHTML = '';
+
+  // Ungrouped section
+  const ugSection = document.createElement('div');
+  ugSection.className = 'group-section';
+  ugSection.innerHTML = `
+    <div class="group-header drop-target" data-group-id="null"><span class="group-name">Ungrouped</span></div>
+    <div class="group-zones"></div>
+  `;
+  const ugZones = zones.filter(z => z.groupId == null);
+  ugZones.forEach(z => appendZoneRow(ugSection.querySelector('.group-zones'), z));
+  setupDropTarget(ugSection.querySelector('.group-header'), null);
+  gl.appendChild(ugSection);
+
+  // Group sections
+  groups.forEach(g => {
+    const section = document.createElement('div');
+    section.className = 'group-section';
+    section.innerHTML = `
+      <div class="group-header drop-target" data-group-id="${g.id}">
+        <span class="group-name">${esc(g.name)}</span>
+        <button class="group-del-btn" title="Delete group">✕</button>
+      </div>
+      <div class="group-zones"></div>
     `;
-    div.querySelector('.zone-name-inp').addEventListener('input', e => renameZone(z.id, e.target.value));
-    div.querySelector('.del-btn').addEventListener('click', e => { e.stopPropagation(); deleteZone(z.id); });
-    div.addEventListener('click', e => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
-      setSelected(z.id);
-    });
-    zl.appendChild(div);
+    section.querySelector('.group-del-btn').addEventListener('click', e => { e.stopPropagation(); deleteGroup(g.id); });
+    const gZones = zones.filter(z => z.groupId === g.id);
+    gZones.forEach(z => appendZoneRow(section.querySelector('.group-zones'), z));
+    setupDropTarget(section.querySelector('.group-header'), g.id);
+    gl.appendChild(section);
   });
+
+  // Music list
 
   // Music list
   const ml = document.getElementById('musicList');
@@ -467,7 +553,11 @@ function showToast(msg) {
 }
 
 document.getElementById('newZoneName').addEventListener('keydown', e => {
-  if (e.key === 'Enter') addZone();
+  if (e.key === 'Enter') addZoneFromInput();
+});
+const newGroupEl = document.getElementById('newGroupName');
+if (newGroupEl) newGroupEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter') addGroup();
 });
 
 // ── SPOTIFY AUTH (PKCE) ───────────────────────────────────────────────────────

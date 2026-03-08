@@ -100,7 +100,37 @@ header {
 }
 .panel-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
-.zones-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+.groups-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.group-section { display: flex; flex-direction: column; gap: 4px; }
+.group-header {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px; border-radius: 6px;
+  background: var(--surface2); border: 1px dashed var(--border);
+  font-size: 10px; color: var(--text-muted); cursor: default;
+  transition: border-color .15s, background .15s;
+}
+.group-header.drop-target-active { border-color: var(--accent); background: rgba(200,255,71,0.08); }
+.group-name { flex: 1; }
+.group-name-inp {
+  flex: 1; background: transparent; border: none;
+  color: var(--text); font-family: 'DM Mono', monospace; font-size: 10px;
+  outline: none; min-width: 0;
+}
+.group-name-inp::placeholder { color: var(--text-dim); }
+.group-del-btn {
+  background: none; border: none; color: var(--text-dim);
+  font-size: 12px; padding: 2px 6px; cursor: pointer;
+  border-radius: 4px; transition: color .12s, background .12s;
+}
+.group-del-btn:hover { color: var(--danger); background: rgba(255,87,87,0.15); }
+.group-zones { display: flex; flex-direction: column; gap: 5px; padding-left: 8px; border-left: 2px solid var(--border); }
+.add-group-row { display: flex; gap: 6px; margin-bottom: 8px; }
+.btn-secondary { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+.btn-secondary:hover { border-color: var(--border-hi); color: var(--text); }
+.zone-drag-handle { cursor: grab; }
+.zone-drag-handle:active { cursor: grabbing; }
+.zone-row.draggable { cursor: grab; }
+.zone-row.zone-dragging { opacity: 0.5; }
 
 .zone-row {
   display: flex;
