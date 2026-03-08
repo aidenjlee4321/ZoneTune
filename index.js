@@ -420,6 +420,36 @@ function extractSoundcloudPermalink(url) {
 async function fetchSoundcloudLabel(permalink) {
   try {
     const res = await fetch(
+      `https://api.soundcloud.com/resolve?url=${encodeURIComponent(permalink)}&client_id=${SC_CLIENT_ID}`
+    );
+    const data = await res.json();
+    return {
+      label: (data.title || permalink).slice(0, 100).replace(/<[^>]*>/g, ''),
+      artworkUrl: data.artwork_url || null,
+      trackId: data.id,
+    };
+  } catch (e) {
+    return { label: permalink, artworkUrl: null, trackId: null };
+  }
+}
+
+
+function detectTrackType(url) {
+  if (/^spotify:|open\.spotify\.com/.test(url)) return 'spotify';
+  if (/soundcloud\.com\/[^/]+\/[^/]+/.test(url)) return 'soundcloud';
+  return null;
+}
+function extractSoundcloudPermalink(url) {
+  // Normalize to just https://soundcloud.com/artist/track
+  try {
+    const u = new URL(url);
+    if (u.hostname === 'soundcloud.com') return url.split('?')[0];
+  } catch (e) { }
+  return null;
+}
+async function fetchSoundcloudLabel(permalink) {
+  try {
+    const res = await fetch(
       `https://soundcloud.com/oembed?url=${encodeURIComponent(permalink)}&format=json`
     );
     const data = await res.json();
