@@ -560,13 +560,14 @@ function appendZoneRow(parent, z) {
 
   function handleSelect(e) {
     if (e.target.closest('.del-btn')) return;
+    if (e.target.closest('.zone-name-inp')) return;
     if (touchDragState || touchDragJustEnded) return;
     setSelected(z.id);
   }
   div.addEventListener('click', handleSelect);
   div.addEventListener('touchend', handleSelect, { passive: true });
 
-  // Mouse drag (desktop)
+  // Mouse drag (desktop) - pip only
   pip.addEventListener('dragstart', e => {
     e.dataTransfer.setData('text/plain', z.id);
     e.dataTransfer.effectAllowed = 'move';
@@ -574,9 +575,10 @@ function appendZoneRow(parent, z) {
   });
   pip.addEventListener('dragend', () => div.classList.remove('zone-dragging'));
 
-  // Touch drag (mobile): hold 1 second to enter drag mode
-  pip.addEventListener('touchstart', e => {
+  // Touch drag (mobile): hold 1s anywhere on row (except input/delete) to enter drag mode
+  function touchStart(e) {
     if (e.touches.length !== 1) return;
+    if (e.target.closest('.zone-name-inp') || e.target.closest('.del-btn')) return;
     const t = e.touches[0];
     touchDragState = {
       zoneId: z.id,
@@ -590,18 +592,18 @@ function appendZoneRow(parent, z) {
         touchDragState.dragMode = true;
         touchDragState.holdTimer = null;
         div.classList.add('zone-dragging');
+        if (navigator.vibrate) navigator.vibrate(50);
         showToast('Drag to move');
       }, HOLD_DURATION_MS)
     };
-  }, { passive: true });
-
-  pip.addEventListener('touchmove', e => {
+  }
+  function touchMove(e) {
     if (!touchDragState || touchDragState.zoneId !== z.id) return;
     const t = e.touches[0];
     const dx = Math.abs(t.clientX - touchDragState.startX);
     const dy = Math.abs(t.clientY - touchDragState.startY);
     if (!touchDragState.dragMode) {
-      if (dx > 8 || dy > 8) {
+      if (dx > 15 || dy > 15) {
         if (touchDragState.holdTimer) {
           clearTimeout(touchDragState.holdTimer);
           touchDragState.holdTimer = null;
@@ -611,14 +613,16 @@ function appendZoneRow(parent, z) {
       return;
     }
     e.preventDefault();
+    e.stopPropagation();
     const el = document.elementFromPoint(t.clientX, t.clientY);
     const header = el?.closest('.group-header.drop-target');
     document.querySelectorAll('.group-header.drop-target').forEach(h => h.classList.remove('drop-target-active'));
-    if (header) header.classList.add('drop-target-active');
-    touchDragState.lastTarget = header;
-  }, { passive: false });
-
-  pip.addEventListener('touchend', e => {
+    if (header) {
+      header.classList.add('drop-target-active');
+      touchDragState.lastTarget = header;
+    }
+  }
+  function touchEnd(e) {
     if (!touchDragState || touchDragState.zoneId !== z.id) return;
     if (touchDragState.holdTimer) {
       clearTimeout(touchDragState.holdTimer);
@@ -626,30 +630,34 @@ function appendZoneRow(parent, z) {
     }
     if (touchDragState.dragMode) {
       e.preventDefault();
+      e.stopPropagation();
       touchDragJustEnded = true;
-      setTimeout(() => { touchDragJustEnded = false; }, 100);
+      setTimeout(() => { touchDragJustEnded = false; }, 150);
       const header = touchDragState.lastTarget;
       document.querySelectorAll('.group-header.drop-target').forEach(h => h.classList.remove('drop-target-active'));
       if (header) {
         const gid = header.dataset.groupId;
         const dropGroupId = gid === 'null' ? null : +gid;
-        if (dropGroupId !== touchDragState.originalGroupId) {
+        if (String(dropGroupId) !== String(touchDragState.originalGroupId)) {
           moveZoneToGroup(z.id, dropGroupId);
         }
       }
     }
     div.classList.remove('zone-dragging');
     touchDragState = null;
-  }, { passive: false });
-
-  pip.addEventListener('touchcancel', () => {
+  }
+  function touchCancel() {
     if (touchDragState?.zoneId === z.id) {
       if (touchDragState.holdTimer) clearTimeout(touchDragState.holdTimer);
       div.classList.remove('zone-dragging');
       document.querySelectorAll('.group-header.drop-target').forEach(h => h.classList.remove('drop-target-active'));
       touchDragState = null;
     }
-  }, { passive: true });
+  }
+  div.addEventListener('touchstart', touchStart, { passive: true });
+  div.addEventListener('touchmove', touchMove, { passive: false });
+  div.addEventListener('touchend', touchEnd, { passive: false });
+  div.addEventListener('touchcancel', touchCancel, { passive: true });
 
   parent.appendChild(div);
 }

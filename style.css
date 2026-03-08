@@ -142,7 +142,10 @@ header {
 }
 .zone-drag-handle:active { cursor: grabbing; }
 .zone-row.draggable { cursor: grab; }
-.zone-row.zone-dragging { opacity: 0.5; }
+.zone-row.zone-dragging {
+  opacity: 0.7;
+  touch-action: none;
+}
 
 .zone-row {
   display: flex;
