@@ -98,6 +98,8 @@ let nextId = parseInt(localStorage.getItem('zonetune_nextId') || '3');
 let selectedZoneId = zones[0].id;   // ← must come AFTER zones is defined
 let mode = 'draw';
 let drawHandler = null;
+let gpsWatchId = null;
+let isGpsActive = false;
 
 // ── MAP INIT ─────────────────────────────────────────────────────────────────
 const map = L.map('map', {
@@ -794,6 +796,13 @@ let personMarker  = null;
 let personVisible = false;
 let currentZoneId = null;
 
+// The new pulsing blue dot for live GPS
+const gpsIcon = L.divIcon({
+  className: 'gps-marker',
+  iconSize: [16, 16],     
+  iconAnchor: [8, 8]   
+});
+
 const personIcon = L.divIcon({
   className: '',
   html: `
@@ -818,9 +827,13 @@ const personIcon = L.divIcon({
 });
 
 function togglePerson() {
+  // Add this safety check!
+  if (isGpsActive) {
+    showToast("Turn off GPS to use the manual person.");
+    return;
+  }
   personVisible ? removePerson() : placePerson();
 }
-
 function placePerson() {
   const center = map.getCenter();
   personMarker = L.marker(center, { icon: personIcon, draggable: true, zIndexOffset: 1000 }).addTo(map);
@@ -840,6 +853,71 @@ function removePerson() {
   document.getElementById('btnPerson').classList.remove('on');
   document.getElementById('btnPersonLabel').textContent = 'Add Person';
   document.getElementById('nowPlaying').classList.remove('show');
+}
+
+function toggleGPS() {
+  const btn = document.getElementById('btnGps');
+  const label = document.getElementById('btnGpsLabel');
+
+  // Turn GPS OFF
+  if (isGpsActive) {
+    if (gpsWatchId) navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+    isGpsActive = false;
+    
+    btn.classList.remove('on');
+    label.textContent = 'Start GPS';
+    
+    // Wipe the marker from the map and stop music
+    removePerson();
+    return;
+  }
+
+  // Check browser support
+  if (!navigator.geolocation) {
+    showToast("Geolocation is not supported by your browser.");
+    return;
+  }
+
+  // Turn GPS ON
+  isGpsActive = true;
+  btn.classList.add('on');
+  label.textContent = 'Stop GPS';
+
+  // Override: If the manual person is currently on the map, wipe it!
+  if (personVisible) {
+    removePerson(); 
+  }
+
+  gpsWatchId = navigator.geolocation.watchPosition(
+    (position) => {
+      const latlng = [position.coords.latitude, position.coords.longitude];
+
+      if (!personMarker) {
+        // First ping: create the marker using the new GPS icon!
+        personMarker = L.marker(latlng, { 
+          icon: gpsIcon,     // <--- CHANGED THIS LINE
+          draggable: false, 
+          zIndexOffset: 1000 
+        }).addTo(map);
+        
+        personVisible = true;
+        map.setView(latlng, 17); // Snap camera to your real location
+      } else {
+        // Subsequent pings: just move the marker
+        personMarker.setLatLng(latlng);
+      }
+
+      // Check if we walked into a zone and trigger Spotify!
+      checkPersonZone();
+    },
+    (error) => {
+      console.error("GPS Error:", error);
+      showToast("Location access denied or unavailable.");
+      toggleGPS(); // Automatically toggle off on error
+    },
+    { enableHighAccuracy: true, maximumAge: 0 }
+  );
 }
 
 function checkPersonZone() {
