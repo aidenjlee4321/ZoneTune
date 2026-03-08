@@ -26,6 +26,7 @@ function googleLogout() {
 
 // ── PALETTE ──────────────────────────────────────────────────────────────────
 const COLORS = ['#c8ff47','#47cfff','#ff5f5f','#ffd166','#c77dff','#ff9f1c','#06d6a0','#ef476f'];
+const SC_CLIENT_ID = 'L8SGpVAf1pxzBWSkGWrt01k6lOcsa1EZ';
 
 // ── PERSISTENCE ───────────────────────────────────────────────────────────────
 async function saveZones() {
@@ -335,6 +336,36 @@ function deleteZone(id) {
   render();
   updateChip();
 }
+
+function detectTrackType(url) {
+  if (/^spotify:|open\.spotify\.com/.test(url)) return 'spotify';
+  if (/soundcloud\.com\/[^/]+\/[^/]+/.test(url)) return 'soundcloud';
+  return null;
+}
+function extractSoundcloudPermalink(url) {
+  // Normalize to just https://soundcloud.com/artist/track
+  try {
+    const u = new URL(url);
+    if (u.hostname === 'soundcloud.com') return url.split('?')[0];
+  } catch (e) { }
+  return null;
+}
+async function fetchSoundcloudLabel(permalink) {
+  try {
+    const res = await fetch(
+      `https://api.soundcloud.com/resolve?url=${encodeURIComponent(permalink)}&client_id=${SC_CLIENT_ID}`
+    );
+    const data = await res.json();
+    return {
+      label: (data.title || permalink).slice(0, 100).replace(/<[^>]*>/g, ''),
+      artworkUrl: data.artwork_url || null,
+      trackId: data.id,
+    };
+  } catch (e) {
+    return { label: permalink, artworkUrl: null, trackId: null };
+  }
+}
+
 function sanitizeName(val) {
   return val.replace(/<[^>]*>/g, '').slice(0, 40);
 }
@@ -356,20 +387,30 @@ function sanitizeSpotifyUrl(url) {
   return '';
 }
 
-function addTrack(zoneId, url) {
-  const clean = sanitizeSpotifyUrl(url);
-  if (!clean) { showToast('Invalid Spotify URL'); return; }
+async function addTrack(zoneId, url) {
   const z = getZone(zoneId);
   if (!z || !url.trim()) return;
-  const uri = extractSpotifyUri(url.trim());
-  if (!uri) { showToast('Invalid Spotify URL'); return; }
-  if (!uri.includes(':track:')) { showToast('Please paste a track URL (not playlist/album)'); return; }
-  // Fetch track metadata from Spotify API for display label
-  fetchTrackLabel(url.trim(), uri).then(label => {
-    z.playlist.push({ url: url.trim(), uri, label });
-    saveZones();
-    render();
-  });
+  if (z.playlist.length >= 100) { showToast('Max 100 tracks per zone'); return; }
+
+  const type = detectTrackType(url.trim());
+  if (!type) { showToast('Paste a Spotify or SoundCloud track URL'); return; }
+
+  if (type === 'spotify') {
+    const uri = extractSpotifyUri(url.trim());
+    if (!uri || !uri.includes(':track:')) { showToast('Please paste a Spotify track URL'); return; }
+    const label = await fetchTrackLabel(url.trim(), uri);
+    z.playlist.push({ url: url.trim(), uri, label, type: 'spotify' });
+
+  } else if (type === 'soundcloud') {
+    const permalink = extractSoundcloudPermalink(url.trim());
+    if (!permalink) { showToast('Invalid SoundCloud URL'); return; }
+    showToast('Fetching track info…');
+    const { label, artworkUrl, trackId } = await fetchSoundcloudLabel(permalink);
+    z.playlist.push({ url: permalink, permalink, label, artworkUrl, trackId, type: 'soundcloud' });
+  }
+
+  saveZones();
+  render();
 }
 
 function removeTrack(zoneId, index) {
